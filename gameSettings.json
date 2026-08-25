@@ -1,0 +1,72 @@
+{
+  "$comment": "DogChaseBones tuning. Edit freely - nothing here changes game rules, only fit, feel and colour.",
+
+  "camera": {
+    "$comment": "Margins from the 393x852 stage edge to the camera fit rect. The grid is scaled to fill what is left, with square cells. Dog queues render inside these margins and may run off-screen.",
+    "margin": { "top": 132, "right": 56, "bottom": 56, "left": 56 },
+    "maxCellSize": 64,
+    "minCellSize": 16
+  },
+
+  "timing": {
+    "$comment": "Milliseconds.",
+    "dogEnterDelay": 140,
+    "dogStepMs": 105,
+    "boneEatMs": 260,
+    "resolveDelayMs": 110,
+    "slideLerp": 0.42,
+    "queueAdvanceMs": 180
+  },
+
+  "layout": {
+    "cellGap": 3,
+    "cellRadius": 6,
+    "blockInset": 2,
+    "blockRadius": 7,
+    "queueDogScale": 0.82,
+    "queueDogGap": 5,
+    "queueMaxDrawn": 4,
+    "queueBadgeGap": 5,
+    "hudHeight": 116,
+    "boneScale": 0.62,
+    "beeScale": 0.5
+  },
+
+  "colors": {
+    "background": "#1c1f2a",
+    "hudBar": "#23283a",
+    "hudRule": "#2f3548",
+    "hudLabel": "#8891a8",
+    "hudValue": "#e8eaf0",
+    "hudDanger": "#ff6b6b",
+    "cell": "#262b3a",
+    "cellStroke": "#333a4d",
+    "dead": "#171a24",
+    "block": "#c9782f",
+    "blockStroke": "#8a4f18",
+    "blockHeld": "#e0913f",
+    "wall": "#464b5c",
+    "wallStroke": "#2b2f3b",
+    "wallHatch": "#5c6274",
+    "bone": "#f2efe6",
+    "bee": "#f2c53d",
+    "beeStroke": "#8a6a10",
+    "beeStripe": "#2b2410",
+    "beeDanger": "#f2c53d",
+    "dog": "#8c5a3c",
+    "dogStroke": "#5d3a24",
+    "dogSnout": "#3d2718",
+    "dogEye": "#241812",
+    "route": "#4d96ff",
+    "badgeFill": "#0e1016",
+    "badgeStroke": "#4d96ff",
+    "badgeText": "#8fc0ff",
+    "editorGuide": "#4d96ff"
+  },
+
+  "debug": {
+    "$comment": "showBeeReach paints every cell a bee can currently reach. Handy while authoring bee levels.",
+    "showBeeReach": true,
+    "showRoutes": true
+  }
+}
