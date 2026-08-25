@@ -18,6 +18,14 @@
     "queueAdvanceMs": 180
   },
 
+  "editor": {
+    "$comment": "The editor is its own view, not the phone frame - it fits the grid to whatever room the scene panel has. padCells is the margin kept around the grid so dog queues stay on screen.",
+    "padCells": 1.7,
+    "minCellSize": 10,
+    "maxCellSize": 84,
+    "panelWidth": 340
+  },
+
   "layout": {
     "cellGap": 3,
     "cellRadius": 6,

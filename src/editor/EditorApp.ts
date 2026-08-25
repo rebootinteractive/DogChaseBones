@@ -2,14 +2,13 @@ import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pi
 import type { FederatedPointerEvent } from 'pixi.js';
 import type { GameElement, LevelData } from '../shared/types';
 import type { LevelStore } from '../levels/store';
-import { STAGE_H, STAGE_W } from '../shared/stage';
 import { SETTINGS } from '../game/settings';
 import { DIRS, DIR_VEC, colOf, idx, rowOf } from '../game/cells';
 import type { Dir } from '../game/cells';
 import { MAX_DIM, MIN_DIM, parseLevel } from '../game/level';
 import { boundaryDirs } from '../game/board';
 import { validateLevel } from '../game/validate';
-import { cellAt, cellCenter, colRowCenter, computeCamera } from '../game/camera';
+import { cellAt, cellCenter, colRowCenter, computeEditorCamera } from '../game/camera';
 import type { Camera } from '../game/camera';
 import { drawBee, drawBlockGroup, drawBone, drawCell, drawDog, drawWall } from '../render/draw';
 
@@ -72,6 +71,8 @@ export class EditorApp {
   private lastPainted: number | null = null;
   private selectedQueue = -1;
 
+  private host?: HTMLDivElement;
+  private sceneEl?: HTMLDivElement;
   private chrome?: HTMLDivElement;
   private modal?: HTMLDivElement;
   private resizeObserver?: ResizeObserver;
@@ -132,29 +133,47 @@ export class EditorApp {
   }
 
   private async init() {
-    await this.app.init({ width: STAGE_W, height: STAGE_H, background: C.background, antialias: true });
-    this.parent.appendChild(this.app.canvas);
+    // The editor is its own screen, not the phone frame: the scene and the tool
+    // panel are siblings, so the panel never covers cells you need to reach.
+    const host = document.createElement('div');
+    host.className = 'editor-root';
+    host.style.setProperty('--editor-panel-width', `${SETTINGS.editor.panelWidth}px`);
+    const scene = document.createElement('div');
+    scene.className = 'editor-scene';
+    host.appendChild(scene);
+    this.parent.appendChild(host);
+    document.body.classList.add('editor-mode');
+    this.host = host;
+    this.sceneEl = scene;
+
+    await this.app.init({ width: 1, height: 1, background: C.background, antialias: true });
+    scene.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
     this.root.addChild(this.gridG, this.boardG, this.overlayG, this.labels);
     this.app.stage.addChild(this.root);
 
     this.app.stage.eventMode = 'static';
-    this.app.stage.hitArea = new Rectangle(0, 0, STAGE_W, STAGE_H);
     this.app.stage.on('pointerdown', this.onDown);
     this.app.stage.on('globalpointermove', this.onMove);
     this.app.stage.on('pointerup', this.onUp);
     this.app.stage.on('pointerupoutside', this.onUp);
 
-    this.recam();
     this.buildChrome();
-    this.redraw();
     this.resizeObserver = new ResizeObserver(() => this.fit());
-    this.resizeObserver.observe(this.parent);
+    this.resizeObserver.observe(scene);
     this.fit();
   }
 
-  private recam() {
-    this.cam = computeCamera(this.cols, this.rows);
+  /** Size the renderer to the scene pane and refit the grid inside it. */
+  private fit() {
+    const el = this.sceneEl;
+    if (!el) return;
+    const w = Math.max(1, el.clientWidth);
+    const h = Math.max(1, el.clientHeight);
+    this.app.renderer.resize(w, h);
+    this.app.stage.hitArea = new Rectangle(0, 0, w, h);
+    this.cam = computeEditorCamera(this.cols, this.rows, { width: w, height: h });
+    this.redraw();
   }
 
   // ---------------------------------------------------------------- input ---
@@ -388,8 +407,7 @@ export class EditorApp {
     this.cols = cols;
     this.rows = rows;
     this.selectedQueue = -1;
-    this.recam();
-    this.redraw();
+    this.fit();
     this.refreshChrome();
   }
 
@@ -397,7 +415,7 @@ export class EditorApp {
 
   private buildChrome() {
     const bar = document.createElement('div');
-    bar.className = 'editor-chrome overlay';
+    bar.className = 'editor-panel';
     bar.innerHTML = `
       <button class="chrome-handle" data-act="collapse">Level setup ▾</button>
       <div class="chrome-body">
@@ -460,7 +478,7 @@ export class EditorApp {
     on('publish', () => this.showPublish());
     bar.querySelector('[data-act="save"]')!.addEventListener('click', (ev) => void this.saveDraft(ev.target as HTMLButtonElement));
 
-    this.parent.appendChild(bar);
+    this.host?.appendChild(bar);
     this.chrome = bar;
     this.refreshChrome();
   }
@@ -597,22 +615,16 @@ export class EditorApp {
     this.modal = el;
   }
 
-  private fit() {
-    const { clientWidth: w, clientHeight: h } = this.parent;
-    const scale = Math.min(w / STAGE_W, h / STAGE_H);
-    this.app.stage.scale.set(scale);
-    this.app.stage.position.set((w - STAGE_W * scale) / 2, (h - STAGE_H * scale) / 2);
-    this.app.renderer.resize(w, h);
-  }
-
   dispose() {
     this.app.stage.off('pointerdown', this.onDown);
     this.app.stage.off('globalpointermove', this.onMove);
     this.app.stage.off('pointerup', this.onUp);
     this.app.stage.off('pointerupoutside', this.onUp);
     this.resizeObserver?.disconnect();
+    document.body.classList.remove('editor-mode');
     this.chrome?.remove();
     this.modal?.remove();
+    this.host?.remove();
     if (this.saveResetTimer) clearTimeout(this.saveResetTimer);
     this.units.clear();
     this.queues = [];

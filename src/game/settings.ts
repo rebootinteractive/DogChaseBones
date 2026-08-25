@@ -22,6 +22,7 @@ export const SETTINGS = {
     maxCellSize: raw.camera.maxCellSize,
     minCellSize: raw.camera.minCellSize,
   },
+  editor: raw.editor,
   timing: raw.timing,
   layout: raw.layout,
   colors,

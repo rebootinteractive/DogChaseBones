@@ -52,10 +52,29 @@ canvas { display: block; touch-action: none; }
 .result-actions { display: flex; gap: 10px; }
 
 /* --------------------------------------------------------------- editor -- */
-.editor-chrome {
-  bottom: 0; left: 0; right: 0; z-index: 5;
-  background: rgba(10,12,18,.94); border-top: 1px solid rgba(255,255,255,.09);
-  display: flex; flex-direction: column;
+/* The editor is not the phone frame. It takes the whole window so a designer on
+   a monitor gets a big board, and the tool panel is a sibling of the scene --
+   never on top of it. */
+body.editor-mode #phone {
+  width: 100vw; height: 100dvh; max-width: none;
+  margin: 0; border-radius: 0; box-shadow: none;
+}
+
+.editor-root {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  background: #0e1016; min-height: 0; overflow: hidden;
+}
+.editor-scene {
+  /* basis 0, not content: the canvas is sized *from* this pane, so letting it
+     feed back into the pane's size would oscillate. */
+  flex: 1 1 0; min-height: 0; min-width: 0;
+  display: flex; overflow: hidden; background: #14161f;
+}
+.editor-scene canvas { margin: auto; }
+
+.editor-panel {
+  flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0;
+  background: rgba(10,12,18,.98); border-top: 1px solid rgba(255,255,255,.09);
 }
 .chrome-handle {
   appearance: none; border: 0; background: none; color: #8891a8; cursor: pointer;
@@ -63,9 +82,21 @@ canvas { display: block; touch-action: none; }
 }
 .chrome-body {
   display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 8px;
-  max-height: 42vh; overflow-y: auto;
+  max-height: 38vh; overflow-y: auto;
 }
-.editor-chrome.collapsed .chrome-body { display: none; }
+.editor-panel.collapsed .chrome-body { display: none; }
+
+/* Desktop: side-by-side, panel gets a fixed column and scrolls on its own. */
+@media (min-width: 900px) {
+  .editor-root { flex-direction: row; }
+  .editor-panel {
+    width: var(--editor-panel-width, 340px); border-top: 0; border-left: 1px solid rgba(255,255,255,.09);
+    overflow-y: auto;
+  }
+  .chrome-body { max-height: none; overflow: visible; }
+  .editor-panel.collapsed .chrome-body { display: flex; }
+  .chrome-handle { display: none; }
+}
 
 .tool-row, .group-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .tool-btn {
@@ -99,7 +130,7 @@ canvas { display: block; touch-action: none; }
 }
 .stepper b { min-width: 20px; text-align: center; color: #e8eaf0; font-size: 12px; }
 
-.warn-list { margin: 0; padding: 0 0 0 16px; list-style: '⚠ '; }
+.warn-list { margin: 0; padding: 0 0 0 16px; list-style: '\26a0  '; }
 .warn-list li { font-size: 11.5px; color: #ffd07a; line-height: 1.5; }
 
 .editor-actions {
