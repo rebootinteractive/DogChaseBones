@@ -43,7 +43,8 @@ function passableNeighbours(state: BoardState, cell: number): number[] {
 }
 
 export interface Route {
-  /** Cells from the queue's entry cell to the cell the dog eats from. */
+  /** Cells from the queue's entry cell to the cell the dog eats from.
+   *  Empty when the bone is on the entry cell and the dog eats from the queue. */
   path: number[];
   /** The block unit carrying the bone this route was found for. */
   boneCell: number;
@@ -61,6 +62,13 @@ export function findRoute(
   claimedBones: Set<number>,
 ): Route | null {
   const entry = queue.cell;
+
+  // A bone parked on the entry cell is right under the leader's nose. It eats
+  // from where it stands, without stepping onto the board -- an empty route.
+  // No cells are walked, so there is nothing for a bee to poison.
+  const atEntry = state.units.get(entry);
+  if (atEntry?.bone && !claimedBones.has(entry)) return { path: [], boneCell: entry };
+
   if (!isPassable(state, entry) || bees.has(entry)) return null;
 
   const prev = new Map<number, number>();

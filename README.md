@@ -16,6 +16,10 @@ multi-queue system on the grid edges.
 - **Dogs** wait in queues on the grid boundary. Only the leader is live. On drag
   release, any leader with a safe route sets off on its own, walks in, eats a
   bone, and destroys its host unit. The queue then advances.
+- **Eating off the queue.** If a bone is parked on the leader's own entry cell,
+  it is already under the dog's nose: the dog eats it from where it stands
+  without walking a route at all. Nothing is reserved, so other groups stay free
+  to slide, and a bee has no route to poison.
 - **Group splitting.** If the eaten unit was the only thing holding a group
   together, it falls apart into independent groups.
 - **Bees** sit fixed on the board and flood outward through open cells. A dog

@@ -102,3 +102,32 @@ describe('findRoute', () => {
     expect(route).toEqual({ path: [4], boneCell: 0 });
   });
 });
+
+describe('eating straight off the queue', () => {
+  const queue = (cell: number) => ({ id: 'q0', cell, dir: 'left' as const, remaining: 1 });
+
+  it('takes a bone parked on the entry cell without stepping onto the board', () => {
+    const b = boardFromAscii(['A...', '....']);
+    expect(findRoute(b, queue(0), new Set(), new Set())).toEqual({ path: [], boneCell: 0 });
+  });
+
+  it('still refuses when the entry cell holds a block with no bone', () => {
+    const b = boardFromAscii(['a...', '....']);
+    expect(findRoute(b, queue(0), new Set(), new Set())).toBeNull();
+  });
+
+  it('goes even when a bee has poisoned the rest of the board', () => {
+    const b = boardFromAscii(['A...', '....', '..*.']);
+    expect(findRoute(b, queue(0), beeReach(b), new Set())).toEqual({ path: [], boneCell: 0 });
+  });
+
+  it('does not take a bone another dog has already claimed', () => {
+    const b = boardFromAscii(['A...', '....']);
+    expect(findRoute(b, queue(0), new Set(), new Set([0]))).toBeNull();
+  });
+
+  it('still refuses when a wall sits on the entry cell', () => {
+    const b = boardFromAscii(['#...', '....']);
+    expect(findRoute(b, queue(0), new Set(), new Set())).toBeNull();
+  });
+});

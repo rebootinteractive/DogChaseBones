@@ -85,3 +85,49 @@ describe('isWon', () => {
     expect(isWon(b)).toBe(true);
   });
 });
+
+describe('eating off the queue', () => {
+  it('sends the leader with an empty route and reserves nothing', () => {
+    const b = boardFromAscii(['A...', '....'], [{ c: 0, r: 0, dir: 'left', count: 1 }]);
+    const out = resolveMoves(b);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ path: [], boneCell: 0 });
+    expect(b.reserved.size).toBe(0);
+    expect(b.queues[0].remaining).toBe(0);
+  });
+
+  it('leaves other groups free to slide while it eats', () => {
+    const b = boardFromAscii(['A.b.', '....'], [{ c: 0, r: 0, dir: 'left', count: 1 }]);
+    resolveMoves(b);
+    expect(canStepGroup(b, 'b', 1, 0)).toBe(true);
+  });
+
+  it('clears the entry cell so the next dog can walk in', () => {
+    const b = boardFromAscii(['Aa.B', '....'], [{ c: 0, r: 0, dir: 'left', count: 2 }]);
+
+    resolveMoves(b);
+    finishWalker(b, b.walkers[0]);
+    expect(b.units.has(0)).toBe(false);
+
+    // Entry is open now, so the second dog walks in for the far bone.
+    const second = resolveMoves(b);
+    expect(second).toHaveLength(1);
+    expect(second[0].boneCell).toBe(3);
+    expect(second[0].path.length).toBeGreaterThan(0);
+    finishWalker(b, b.walkers[0]);
+    expect(isWon(b)).toBe(true);
+  });
+
+  it('splits the host group when the eaten unit was holding it together', () => {
+    const b = boardFromAscii(['aAa.', '....'], [{ c: 1, r: 0, dir: 'up', count: 1 }]);
+    resolveMoves(b);
+    const result = finishWalker(b, b.walkers[0]);
+    expect(result.groups).toHaveLength(2);
+  });
+
+  it('serves one dog per queue even when the bone is right there', () => {
+    const b = boardFromAscii(['A...', '....'], [{ c: 0, r: 0, dir: 'left', count: 3 }]);
+    expect(resolveMoves(b)).toHaveLength(1);
+    expect(resolveMoves(b)).toHaveLength(0);
+  });
+});
