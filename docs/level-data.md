@@ -71,26 +71,30 @@ One project, one `levels` table, and the `prototype` column namespaces every
 game. Run `docs/supabase-schema.sql` once. See that file for why the key is
 `(prototype, id)` and not `id`.
 
-### The API key never ships in a player build
+### The API key — studio policy
 
-Reading levels needs an API key, and that key is **embedded in the client** —
-in the JS bundle on GitHub Pages, or in a Unity build. It can be extracted from
-either. It is not a secret; treat it as public.
+The key is treated as **public**. It lives in the repo and in development
+builds, and it is removed by hand for a production build. This is a deliberate
+decision, taken knowing what it means:
 
-It also **grants write access**, because the row policies are open. So an
-extracted key lets anyone add, change or overwrite levels in *any* prototype
-sharing the project.
+- The key is embedded in the client — the JS bundle on GitHub Pages, or a Unity
+  build — and extractable from either.
+- It **grants write access**, because the row policies are open. Anyone holding
+  it can add, change or overwrite levels in any prototype sharing the project.
+- The web prototypes are internal design tools. Their key is in a public page.
 
-The rules that follow:
+What that requires in practice:
 
-- **Editor and dev builds only.** Keep the key in config that is excluded from
-  release builds.
+- **Unity:** the URL and key are a public serialized field, visible in the
+  Inspector alongside the prototype id and the `UseSupabaseLevels` toggle.
+  Cleared before a production build.
 - **Bake levels for production.** Fetch every level for the prototype at build
   time, write them into the project, and turn the live fetch off. A shipping
-  game then contains levels and no key at all.
-- **The web prototypes are internal tools.** Once Supabase is wired, their key
-  is in a public page. Anyone who finds the URL can write levels. Acceptable for
-  a design tool — but a decision, not a surprise.
+  game then carries levels and no key.
+- **Rotation is the remedy, not deletion.** A key committed to a public repo is
+  in that repo's history permanently; deleting the file later does not remove
+  it. If a key ever needs to stop working, roll it in the Supabase dashboard —
+  do not rely on scrubbing it from the tree.
 
 ## Reading levels from Unity
 
@@ -104,15 +108,27 @@ GET  {SUPABASE_URL}/rest/v1/levels?prototype=eq.dog-chase-bones&select=data
 
 Each row's `data` is one level document. Check `meta.schema` before parsing.
 
-## Keeping two implementations honest
+## Two implementations — studio policy
 
-The rules of the game live in `src/game/` as pure TypeScript with tests
+The rules of the game live in `src/game/` as pure TypeScript, with tests
 covering sliding, bee flood, route locking, group splitting and bone stacks.
 A Unity port re-implements all of it, and small divergences — which route a dog
 picks between two equal ones, whether a group splits at a corner, what happens
 when two dogs want the same bone — produce levels that are solvable in the web
 editor and unsolvable in Unity.
 
-Before Unity work starts, export those test cases as a shared fixture file and
-run them on both sides, so "does Unity match the prototype?" is a test result
-rather than an argument.
+The accepted approach:
+
+- **This prototype is the reference implementation.** The Unity workspace keeps
+  it to hand, and it stays deployed and playable — a reference you can run
+  beats a reference you read. The tests in `tests/` are the precise part of the
+  specification; where prose and tests disagree, the tests win.
+- **Feature lock during Unity production.** The mechanic stops moving once the
+  port begins.
+- **A change during production is made on both sides, or the prototype
+  retires** and development moves wholly to Unity.
+
+This is a known and accepted production risk rather than an oversight. If it
+starts costing real time, the fallback is to export the test fixtures as a
+shared file and run them on both sides, turning "does Unity match?" into a test
+result instead of an argument.
