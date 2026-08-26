@@ -15,8 +15,21 @@ import { idx, inBounds, isDir, type Dir } from './cells';
 //                                               repeated bone elements also add up.
 //   { type: 'queue', x, y, dir, count }         entry cell; dogs line up towards `dir`
 //
-// meta: { cols, rows, timeLimit }
+// meta: { schema, cols, rows, timeLimit }
+//
+// `schema` is the edition of this format. Levels are read by more than one
+// program -- the web prototype now, Unity later -- built at different times. A
+// format change without a version number fails silently: a level loads and
+// plays wrong, which is far more expensive than one that refuses to load.
+// Bump SCHEMA_VERSION on any change an older reader would misinterpret.
 // ---------------------------------------------------------------------------
+
+/**
+ * Edition of the level format.
+ *   1 -- initial: dead/wall/bee/block/bone/queue elements, meta cols/rows/timeLimit.
+ *        Bones carry an optional `count`; absent means one.
+ */
+export const SCHEMA_VERSION = 1;
 
 export const DEFAULT_COLS = 6;
 export const DEFAULT_ROWS = 10;
@@ -41,6 +54,8 @@ export interface QueueSpec {
 }
 
 export interface LevelSpec {
+  /** Edition the level was authored in. Levels predating the field are 1. */
+  schema: number;
   cols: number;
   rows: number;
   timeLimit: number;
@@ -73,11 +88,23 @@ export function parseLevel(level: LevelData): ParseResult {
   const timeRaw = num(meta.timeLimit);
   const timeLimit = timeRaw !== null && timeRaw > 0 ? Math.round(timeRaw) : DEFAULT_TIME_LIMIT;
 
+  // Absent means edition 1 -- levels authored before the field existed really
+  // are edition 1. A newer edition is refused loudly rather than guessed at.
+  const schemaRaw = num(meta.schema);
+  const schema = schemaRaw !== null && schemaRaw >= 1 ? Math.round(schemaRaw) : SCHEMA_VERSION;
+
   const spec: LevelSpec = {
-    cols, rows, timeLimit,
+    schema, cols, rows, timeLimit,
     dead: new Set(), walls: new Set(), bees: new Set(), units: [], queues: [],
   };
   const issues: string[] = [];
+
+  if (schema > SCHEMA_VERSION) {
+    issues.push(
+      `level is edition ${schema}; this build understands up to ${SCHEMA_VERSION}. ` +
+      'It was made with a newer editor -- update before opening it.',
+    );
+  }
 
   // One occupant per cell: dead / wall / bee / block are mutually exclusive.
   const occupant = new Map<number, string>();

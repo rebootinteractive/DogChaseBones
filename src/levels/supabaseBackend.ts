@@ -28,7 +28,9 @@ export class SupabaseBackend implements LevelsBackend {
 
   async insert(level: LevelData): Promise<void> {
     const row: LevelRow = { id: level.id, prototype: level.prototype, name: level.name, data: level };
-    const { error } = await this.client.from('levels').upsert(row, { onConflict: 'id' });
+    // Matches the (prototype, id) key: an id is unique within a game, not
+    // across the studio's shared table.
+    const { error } = await this.client.from('levels').upsert(row, { onConflict: 'prototype,id' });
     if (error) throw error;
   }
 }

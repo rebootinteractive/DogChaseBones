@@ -131,6 +131,7 @@
     }
   ],
   "meta": {
+    "schema": 1,
     "cols": 6,
     "rows": 6,
     "timeLimit": 150

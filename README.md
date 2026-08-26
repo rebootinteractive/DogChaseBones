@@ -49,6 +49,8 @@ multi-queue system on the grid edges.
 | `src/editor/EditorApp.ts` | The in-game level editor. |
 | `src/levels/builtin.ts` | The three baseline levels, authored as ASCII. |
 | `src/levels/published/` | Levels published from the editor and committed here. |
+| `docs/level-data.md` | The level format, and the rules for sharing it with Unity. |
+| `docs/supabase-schema.sql` | Run once in the shared studio project. |
 
 ## Tuning
 

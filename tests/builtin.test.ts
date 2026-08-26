@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BUILTIN_LEVELS } from '../src/levels/builtin';
-import { countBones, countDogs, parseLevel } from '../src/game/level';
+import { SCHEMA_VERSION, countBones, countDogs, parseLevel } from '../src/game/level';
 import { createBoard } from '../src/game/board';
 import type { BoardState } from '../src/game/board';
 import { validateLevel } from '../src/game/validate';
@@ -32,6 +32,7 @@ describe('every builtin level', () => {
     expect(issues).toEqual([]);
     expect(validateLevel(spec)).toEqual([]);
     expect(countDogs(spec)).toBe(countBones(spec));
+    expect(spec.schema).toBe(SCHEMA_VERSION);
   });
 });
 

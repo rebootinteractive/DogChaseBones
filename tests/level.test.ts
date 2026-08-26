@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { countBones, countDogs, parseLevel, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_TIME_LIMIT } from '../src/game/level';
+import { countBones, countDogs, parseLevel, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_TIME_LIMIT, SCHEMA_VERSION } from '../src/game/level';
 import { levelFromAscii } from './helpers';
 
 const level = (elements: Record<string, unknown>[], meta?: Record<string, unknown>) => ({
@@ -108,5 +108,28 @@ describe('stacked bones', () => {
     ], { cols: 4, rows: 4 }));
     expect(countBones(spec)).toBe(3);
     expect(countDogs(spec)).toBe(3);
+  });
+});
+
+describe('format edition', () => {
+  it('stamps edition 1 on a level that predates the field', () => {
+    const { spec, issues } = parseLevel(level([], { cols: 4, rows: 4 }));
+    expect(spec.schema).toBe(1);
+    expect(issues).toEqual([]);
+  });
+
+  it('reads the edition a level declares', () => {
+    expect(parseLevel(level([], { schema: 1, cols: 4, rows: 4 })).spec.schema).toBe(1);
+  });
+
+  it('refuses a level from a newer editor loudly instead of guessing', () => {
+    const { spec, issues } = parseLevel(level([], { schema: SCHEMA_VERSION + 1, cols: 4, rows: 4 }));
+    expect(spec.schema).toBe(SCHEMA_VERSION + 1);
+    expect(issues.join(' ')).toMatch(/newer editor/);
+  });
+
+  it('treats a nonsense edition as the current one', () => {
+    expect(parseLevel(level([], { schema: 'banana', cols: 4, rows: 4 })).spec.schema).toBe(SCHEMA_VERSION);
+    expect(parseLevel(level([], { schema: 0, cols: 4, rows: 4 })).spec.schema).toBe(SCHEMA_VERSION);
   });
 });

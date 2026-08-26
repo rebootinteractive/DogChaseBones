@@ -5,7 +5,7 @@ import type { LevelStore } from '../levels/store';
 import { SETTINGS } from '../game/settings';
 import { DIRS, DIR_VEC, colOf, idx, rowOf } from '../game/cells';
 import type { Dir } from '../game/cells';
-import { MAX_DIM, MIN_DIM, parseLevel } from '../game/level';
+import { MAX_DIM, MIN_DIM, SCHEMA_VERSION, parseLevel } from '../game/level';
 import { boundaryDirs } from '../game/board';
 import { validateLevel } from '../game/validate';
 import { cellAt, cellCenter, colRowCenter, computeEditorCamera, toCellDelta } from '../game/camera';
@@ -576,7 +576,7 @@ export class EditorApp {
       name: this.name,
       prototype: this.opts.prototype,
       elements,
-      meta: { cols: this.cols, rows: this.rows, timeLimit: this.timeLimit },
+      meta: { schema: SCHEMA_VERSION, cols: this.cols, rows: this.rows, timeLimit: this.timeLimit },
     };
   }
 

@@ -83,6 +83,7 @@
     }
   ],
   "meta": {
+    "schema": 1,
     "cols": 5,
     "rows": 4,
     "timeLimit": 90

@@ -3,7 +3,7 @@ import { PUBLISHED_LEVELS } from '../src/levels/published';
 import { BUILTIN_LEVELS } from '../src/levels/builtin';
 import { mergeLevels } from '../src/levels/merge';
 import { validateLevelData } from '../src/levels/serialize';
-import { countBones, countDogs, parseLevel } from '../src/game/level';
+import { SCHEMA_VERSION, countBones, countDogs, parseLevel } from '../src/game/level';
 import { createBoard, bonesRemaining } from '../src/game/board';
 import { PROTOTYPE } from '../src/config';
 import type { LevelData } from '../src/shared/types';
@@ -34,6 +34,10 @@ describe.runIf(entries.length > 0)('published levels', () => {
 
     const { spec, issues } = parseLevel(level);
     expect(issues).toEqual([]);
+
+    // Every committed level says which edition of the format it is, so a future
+    // reader refuses it rather than misreading it.
+    expect(meta?.schema).toBe(SCHEMA_VERSION);
     expect(countDogs(spec)).toBeGreaterThan(0);
     expect(bonesRemaining(createBoard(spec))).toBe(countBones(spec));
   });

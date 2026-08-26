@@ -1,5 +1,6 @@
 import type { GameElement, LevelData } from '../shared/types';
 import { PROTOTYPE } from '../config';
+import { SCHEMA_VERSION } from '../game/level';
 
 /**
  * Baseline levels, authored as ASCII so the layout is readable in the diff.
@@ -30,7 +31,7 @@ function level(
   return {
     id, name, prototype: PROTOTYPE,
     elements: [...fromAscii(rows), ...queues.map((q) => ({ type: 'queue', ...q }))],
-    meta: { cols: rows[0].length, rows: rows.length, timeLimit },
+    meta: { schema: SCHEMA_VERSION, cols: rows[0].length, rows: rows.length, timeLimit },
   };
 }
 
