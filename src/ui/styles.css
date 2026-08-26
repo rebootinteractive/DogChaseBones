@@ -26,6 +26,7 @@ canvas { display: block; touch-action: none; }
 .menu h1 { font-size: 26px; margin: 8px 0 0; }
 .menu-sub { margin: 0 0 6px; color: #8891a8; font-size: 14px; }
 .menu-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1; }
+.menu-actions { display: flex; flex-direction: column; gap: 8px; }
 .level-row { display: flex; gap: 8px; align-items: stretch; }
 .level-card {
   flex: 1; text-align: left; padding: 14px 16px; border: 0; border-radius: 14px;

@@ -88,6 +88,13 @@ name or time field.
   drop in `src/levels/published/` and commit — that is what goes live for
   everyone until this prototype gets a Supabase project.
 
+**Download all levels** on the menu saves every level in the list as its own
+`.json`, numbered in menu order and ready to drop straight into
+`src/levels/published/`. Drafts live only in the browser that made them, so this
+is how they get into git and onto everyone else's screen. The draft flag is
+stripped on the way out. The browser asks permission for the first of a batch —
+allow it, or only one file arrives.
+
 ## Dev
 
 ```bash

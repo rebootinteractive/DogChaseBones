@@ -1,6 +1,7 @@
 import type { LevelData } from '../shared/types';
 import type { LevelStore } from '../levels/store';
 import { countBones, countDogs, parseLevel } from '../game/level';
+import { exportFileName, exportPayload } from '../levels/exportLevel';
 
 export interface MenuOptions {
   store: LevelStore;
@@ -10,6 +11,8 @@ export interface MenuOptions {
 
 export class MainMenu {
   private root: HTMLDivElement;
+  private levels: LevelData[] = [];
+  private timers: Array<ReturnType<typeof setTimeout>> = [];
 
   constructor(private parent: HTMLElement, private opts: MenuOptions) {
     this.root = document.createElement('div');
@@ -18,8 +21,13 @@ export class MainMenu {
       <h1>Dog Chase Bones</h1>
       <p class="menu-sub">Slide the blocks. Open a path. Feed every dog.</p>
       <div class="menu-list">Loading…</div>
-      <button class="btn" data-act="new">+ Create New Level</button>`;
+      <div class="menu-actions">
+        <button class="btn" data-act="new">+ Create New Level</button>
+        <button class="btn ghost" data-act="export" disabled>Download all levels</button>
+      </div>`;
     this.root.querySelector('[data-act="new"]')!.addEventListener('click', () => this.opts.onEdit());
+    this.root.querySelector('[data-act="export"]')!.addEventListener('click', (ev) =>
+      this.downloadAll(ev.currentTarget as HTMLButtonElement));
     this.parent.appendChild(this.root);
     void this.load();
   }
@@ -27,6 +35,11 @@ export class MainMenu {
   private async load() {
     const levels = await this.opts.store.list();
     if (!this.root.isConnected) return;
+    this.levels = levels;
+
+    const exportBtn = this.root.querySelector<HTMLButtonElement>('[data-act="export"]')!;
+    exportBtn.disabled = levels.length === 0;
+    exportBtn.textContent = levels.length ? `Download all levels (${levels.length})` : 'Download all levels';
 
     const list = this.root.querySelector('.menu-list')!;
     list.innerHTML = '';
@@ -62,5 +75,51 @@ export class MainMenu {
     }
   }
 
-  dispose() { this.root.remove(); }
+  /**
+   * One .json per level, named in menu order, ready to drop into
+   * src/levels/published/ and commit. Drafts live only in this browser's
+   * localStorage, so this is how they become real levels.
+   *
+   * Staggered: browsers quietly drop a burst of downloads fired in one tick,
+   * and the first one triggers a permission prompt that must be answered.
+   */
+  private downloadAll(btn: HTMLButtonElement) {
+    const levels = this.levels;
+    if (!levels.length) return;
+
+    btn.disabled = true;
+    let done = 0;
+
+    levels.forEach((level, i) => {
+      this.timers.push(setTimeout(() => {
+        if (!this.root.isConnected) return;
+        const json = JSON.stringify(exportPayload(level), null, 2);
+        const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = exportFileName(level, i);
+        a.click();
+        URL.revokeObjectURL(url);
+
+        done++;
+        btn.textContent = done < levels.length
+          ? `Downloading ${done}/${levels.length}…`
+          : `Downloaded ${levels.length} ✓`;
+
+        if (done === levels.length) {
+          this.timers.push(setTimeout(() => {
+            if (!this.root.isConnected) return;
+            btn.disabled = false;
+            btn.textContent = `Download all levels (${levels.length})`;
+          }, 2500));
+        }
+      }, i * 140));
+    });
+  }
+
+  dispose() {
+    for (const t of this.timers) clearTimeout(t);
+    this.timers = [];
+    this.root.remove();
+  }
 }
