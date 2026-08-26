@@ -66,6 +66,18 @@ Menu → **Edit** on a level, or **+ Create New Level**.
 - **Queue**: tap a cell whose outward side is off-grid or switched off. Tap it
   again to turn it; set the dog count in the settings row.
 - Warnings appear live and never block a save.
+
+**Keyboard (desktop):**
+
+| key | does |
+| --- | --- |
+| `1`–`8` | pick a tool: Block, Move, Bone, Wall, Bee, Off, Queue, Erase |
+| `⇧1`–`⇧9` | pick a paint colour, while the Block tool is up |
+
+Numbers are shown on the buttons and chips. `⇧N` creates the colours up to slot
+N if they do not exist yet, so a fresh level can jump straight to `⇧4`. Colours
+past slot 9 are chip-only. Shortcuts are ignored while you are typing in the
+name or time field.
 - **Save draft** keeps it in your browser. **Publish** hands you a JSON file to
   drop in `src/levels/published/` and commit — that is what goes live for
   everyone until this prototype gets a Supabase project.

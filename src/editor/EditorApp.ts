@@ -47,6 +47,9 @@ interface MoveDrag {
 const C = SETTINGS.colors;
 const L = SETTINGS.layout;
 
+/** Group slots reachable from the keyboard. Beyond this, use the chips. */
+const KEY_GROUP_SLOTS = 9;
+
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'block', label: 'Block', hint: 'Tap cells to add them to the active group.' },
   { id: 'move', label: 'Move', hint: 'Drag a whole block group somewhere else. Red means it will not fit.' },
@@ -143,7 +146,13 @@ export class EditorApp {
       }
     }
     if (seen.size) {
-      this.groups = [...seen].sort();
+      // Numeric order: a lexical sort would put g10 before g2 and desync the
+      // Shift+N slots from what the chips show.
+      this.groups = [...seen].sort((a, b) => {
+        const na = Number(a.replace(/\D/g, ''));
+        const nb = Number(b.replace(/\D/g, ''));
+        return na === nb ? a.localeCompare(b) : na - nb;
+      });
       this.activeGroup = this.groups[0];
       this.groupSeq = this.groups.reduce((n, g) => Math.max(n, Number(g.replace(/\D/g, '')) || 0), 0);
     }
@@ -178,6 +187,7 @@ export class EditorApp {
     this.app.stage.on('pointerupoutside', this.onUp);
 
     this.buildChrome();
+    window.addEventListener('keydown', this.onKeyDown);
     this.resizeObserver = new ResizeObserver(() => this.fit());
     this.resizeObserver.observe(scene);
     this.fit();
@@ -221,6 +231,46 @@ export class EditorApp {
     this.painting = false;
     this.lastPainted = null;
   };
+
+  /**
+   * Desktop authoring: 1-8 pick a tool, Shift+1-9 pick a paint colour while the
+   * Block tool is up. `code` rather than `key`, because Shift+1 reports "!" on
+   * most layouts but always reports Digit1.
+   */
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if (this.modal) return;
+
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+    const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+    if (!digit) return;
+    const n = Number(digit[1]);
+
+    if (e.shiftKey) {
+      if (this.tool !== 'block') return;
+      this.selectGroupSlot(n);
+    } else {
+      const tool = TOOLS[n - 1];
+      if (!tool) return;
+      this.tool = tool.id;
+    }
+
+    e.preventDefault();
+    this.redraw();
+    this.refreshChrome();
+  };
+
+  /** Slot n of the paint palette, creating the groups up to it on the way. */
+  private selectGroupSlot(n: number) {
+    const want = Math.min(n, KEY_GROUP_SLOTS);
+    while (this.groups.length < want) {
+      this.groupSeq++;
+      this.groups.push(`g${this.groupSeq}`);
+    }
+    this.activeGroup = this.groups[want - 1];
+  }
 
   private cellUnder(e: FederatedPointerEvent): number | null {
     const p = this.app.stage.toLocal(e.global);
@@ -544,6 +594,7 @@ export class EditorApp {
       <div class="chrome-body">
         <div class="tool-row"></div>
         <p class="tool-hint"></p>
+        <p class="key-hint">1\u20138 pick a tool \u00b7 \u21e7 1\u20139 pick a paint colour</p>
         <div class="group-row"></div>
         <div class="settings-row">
           <label>Name <input class="editor-name" /></label>
@@ -572,14 +623,20 @@ export class EditorApp {
       </div>`;
 
     const tools = bar.querySelector('.tool-row')!;
-    for (const t of TOOLS) {
+    TOOLS.forEach((t, i) => {
       const b = document.createElement('button');
       b.className = 'tool-btn';
       b.dataset.tool = t.id;
       b.textContent = t.label;
+      if (i < 9) {
+        const key = document.createElement('i');
+        key.className = 'key';
+        key.textContent = String(i + 1);
+        b.appendChild(key);
+      }
       b.onclick = () => { this.tool = t.id; this.refreshChrome(); this.redraw(); };
       tools.appendChild(b);
-    }
+    });
 
     const nameInput = bar.querySelector<HTMLInputElement>('.editor-name')!;
     nameInput.value = this.name;
@@ -663,11 +720,17 @@ export class EditorApp {
     const groupRow = bar.querySelector<HTMLElement>('.group-row')!;
     groupRow.style.display = this.tool === 'block' ? 'flex' : 'none';
     groupRow.innerHTML = '';
-    this.groups.forEach((g) => {
+    this.groups.forEach((g, i) => {
       const b = document.createElement('button');
       b.className = 'group-chip' + (g === this.activeGroup ? ' active' : '');
       b.style.background = '#' + this.tintFor(g).toString(16).padStart(6, '0');
       b.textContent = g;
+      if (i < KEY_GROUP_SLOTS) {
+        const key = document.createElement('i');
+        key.className = 'key';
+        key.textContent = `\u21e7${i + 1}`;
+        b.appendChild(key);
+      }
       b.onclick = () => { this.activeGroup = g; this.refreshChrome(); };
       groupRow.appendChild(b);
     });
@@ -772,6 +835,7 @@ export class EditorApp {
     this.app.stage.off('globalpointermove', this.onMove);
     this.app.stage.off('pointerup', this.onUp);
     this.app.stage.off('pointerupoutside', this.onUp);
+    window.removeEventListener('keydown', this.onKeyDown);
     this.resizeObserver?.disconnect();
     document.body.classList.remove('editor-mode');
     this.chrome?.remove();
