@@ -11,11 +11,15 @@ import { PROTOTYPE, HAS_BACKEND } from './config';
 import type { LevelData } from './shared/types';
 
 const appEl = document.getElementById('app')!;
-const backend = HAS_BACKEND ? new SupabaseBackend() : new LocalDraftBackend(PROTOTYPE);
-// Published levels replace a same-id builtin in place rather than sitting
+// Drafts are always local. Supabase, when configured, is the *publish* target
+// only -- so connecting it never turns a private Save into a live publish.
+const drafts = new LocalDraftBackend(PROTOTYPE);
+const published = HAS_BACKEND ? new SupabaseBackend() : null;
+
+// A repo-published level replaces a same-id builtin in place rather than sitting
 // alongside it -- editing a baseline in the editor keeps its id, and showing
 // both the original and the edited copy would be two cards for one level.
-const store = new LevelStore(PROTOTYPE, backend, mergeLevels(BUILTIN_LEVELS, PUBLISHED_LEVELS));
+const store = new LevelStore(PROTOTYPE, drafts, published, mergeLevels(BUILTIN_LEVELS, PUBLISHED_LEVELS));
 
 let current: { dispose(): void } | undefined;
 function clearApp() { current?.dispose(); current = undefined; }

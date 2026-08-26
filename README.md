@@ -86,9 +86,11 @@ Numbers are shown on the buttons and chips. `⇧N` creates the colours up to slo
 N if they do not exist yet, so a fresh level can jump straight to `⇧4`. Colours
 past slot 9 are chip-only. Shortcuts are ignored while you are typing in the
 name or time field.
-- **Save draft** keeps it in your browser. **Publish** hands you a JSON file to
-  drop in `src/levels/published/` and commit — that is what goes live for
-  everyone until this prototype gets a Supabase project.
+- **Save draft** keeps it in your browser, always — drafts never leave this
+  machine, configured backend or not. **Publish** is the deliberate second step
+  that shares a level: it uploads to Supabase when that is configured, and
+  otherwise hands you a JSON file to drop in `src/levels/published/` and commit.
+  The menu says which of the two you are in.
 
 **Download all levels** on the menu saves every level in the list as its own
 `.json`, numbered in menu order and ready to drop straight into

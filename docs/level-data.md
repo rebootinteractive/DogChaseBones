@@ -61,9 +61,17 @@ misinterpret. Levels with no `schema` field predate it and are edition 1.
 3. **Drafts** — the editor's Save, kept in that one browser's localStorage.
 4. **Supabase** — once configured, shared live with everyone.
 
-`mergeLevels` layers them: builtin order first, with a same-id level from a
-later source replacing one from an earlier source in place, then the rest by
-name. That is how an edited baseline supersedes the original.
+`mergeLevels` layers them in that order: a same-id level from a later layer
+replaces one from an earlier layer in place, then the rest follow by name. That
+is how an edited baseline supersedes the original, and how a local draft shadows
+the published copy of the level you are editing.
+
+**Drafts are always local, whether or not Supabase is configured.** `LevelStore`
+holds two backends: drafts (localStorage) and published (Supabase, or none).
+Save writes to the first, Publish to the second. They are kept apart so that
+connecting Supabase cannot silently turn a private Save into a live publish —
+Publish stays a deliberate second step, which is the authoring model the studio
+chose.
 
 ## Supabase: one project for the whole studio
 

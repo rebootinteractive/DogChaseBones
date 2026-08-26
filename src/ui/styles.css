@@ -24,7 +24,9 @@ canvas { display: block; touch-action: none; }
 /* ------------------------------------------------------------------ menu -- */
 .menu { inset: 0; display: flex; flex-direction: column; gap: 12px; padding: 28px 20px; }
 .menu h1 { font-size: 26px; margin: 8px 0 0; }
-.menu-sub { margin: 0 0 6px; color: #8891a8; font-size: 14px; }
+.menu-sub { margin: 0 0 2px; color: #8891a8; font-size: 14px; }
+.menu-status { margin: 0 0 6px; font-size: 11.5px; color: #6f7a95; line-height: 1.45; }
+.menu-status.live { color: #6cc24a; }
 .menu-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1; }
 .menu-actions { display: flex; flex-direction: column; gap: 8px; }
 .level-row { display: flex; gap: 8px; align-items: stretch; }
@@ -177,3 +179,6 @@ body.editor-mode #phone {
   font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; line-height: 1.5;
 }
 .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.publish-note { margin: 0; }
+.modal-card details { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.modal-card summary { font-size: 12px; color: #8891a8; cursor: pointer; padding: 4px 0; }

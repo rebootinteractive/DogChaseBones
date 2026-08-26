@@ -20,11 +20,20 @@ export class MainMenu {
     this.root.innerHTML = `
       <h1>Dog Chase Bones</h1>
       <p class="menu-sub">Slide the blocks. Open a path. Feed every dog.</p>
+      <p class="menu-status"></p>
       <div class="menu-list">Loading…</div>
       <div class="menu-actions">
         <button class="btn" data-act="new">+ Create New Level</button>
         <button class="btn ghost" data-act="export" disabled>Download all levels</button>
       </div>`;
+    // Say plainly whether a saved level can reach anyone else. Without this the
+    // only difference between local-only and connected is invisible.
+    const status = this.root.querySelector<HTMLElement>('.menu-status')!;
+    status.textContent = opts.store.canPublish
+      ? 'Shared levels are on — Publish sends a level to everyone.'
+      : 'Local only — Save keeps a level in this browser; Publish gives you JSON to commit.';
+    status.classList.toggle('live', opts.store.canPublish);
+
     this.root.querySelector('[data-act="new"]')!.addEventListener('click', () => this.opts.onEdit());
     this.root.querySelector('[data-act="export"]')!.addEventListener('click', (ev) =>
       this.downloadAll(ev.currentTarget as HTMLButtonElement));

@@ -812,35 +812,55 @@ export class EditorApp {
   private async saveDraft(btn: HTMLButtonElement) {
     btn.disabled = true;
     btn.textContent = 'Saving…';
-    try { await this.opts.store.save(this.snapshot()); btn.textContent = 'Saved ✓'; }
+    try { await this.opts.store.saveDraft(this.snapshot()); btn.textContent = 'Saved ✓'; }
     catch (err) { btn.textContent = 'Save failed'; console.error(err); }
     finally { this.saveResetTimer = setTimeout(() => { btn.disabled = false; btn.textContent = 'Save draft'; }, 1200); }
   }
 
   /**
-   * Until this prototype has a Supabase project, publishing means committing the
-   * level JSON to the repo. The modal hands over the exact file to drop in.
+   * Publishing shares a level with everyone. With a shared backend configured
+   * that is an upload; without one it means committing the JSON to the repo,
+   * and the modal hands over the exact file to drop in. Either way it is a
+   * deliberate second step -- Save keeps a level private.
    */
   private showPublish() {
     this.modal?.remove();
     const level = this.snapshot();
     const json = JSON.stringify(level, null, 2);
     const file = `${slug(this.name)}.json`;
+    const live = this.opts.store.canPublish;
 
     const el = document.createElement('div');
     el.className = 'modal overlay';
     el.innerHTML = `
       <div class="modal-card">
         <h2>Publish level</h2>
-        <p>Save this as <code>src/levels/published/${file}</code> and commit it. It ships to everyone on the next deploy.</p>
-        <textarea readonly></textarea>
+        <p class="publish-note"></p>
+        ${live ? '<div class="modal-actions"><button class="btn" data-act="upload">Publish to everyone</button></div>' : ''}
+        <details ${live ? '' : 'open'}>
+          <summary>Level JSON</summary>
+          <textarea readonly></textarea>
+        </details>
         <div class="modal-actions">
           <button class="btn small" data-act="copy">Copy JSON</button>
           <button class="btn small" data-act="download">Download</button>
           <button class="btn ghost small" data-act="close">Close</button>
         </div>
       </div>`;
+    el.querySelector('.publish-note')!.textContent = live
+      ? 'This goes live for everyone on their next load. You can also commit the JSON to keep it in the repo.'
+      : `Save this as src/levels/published/${file} and commit it. It ships to everyone on the next deploy.`;
     el.querySelector('textarea')!.value = json;
+
+    el.querySelector('[data-act="upload"]')?.addEventListener('click', (ev) => {
+      const btn = ev.target as HTMLButtonElement;
+      btn.disabled = true;
+      btn.textContent = 'Publishing…';
+      void this.opts.store.publish(level).then(
+        () => { btn.textContent = 'Published ✓'; },
+        (err: unknown) => { btn.disabled = false; btn.textContent = 'Publish failed'; console.error(err); },
+      );
+    });
 
     el.querySelector('[data-act="copy"]')!.addEventListener('click', (ev) => {
       const btn = ev.target as HTMLButtonElement;
