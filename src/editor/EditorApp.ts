@@ -36,7 +36,7 @@ const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'wall', label: 'Wall', hint: 'Static, unmovable, blocks everything.' },
   { id: 'bee', label: 'Bee', hint: 'Fixed. Poisons every cell it can reach.' },
   { id: 'dead', label: 'Off', hint: 'Switch a cell off. Use these to split islands.' },
-  { id: 'queue', label: 'Queue', hint: 'Tap a boundary cell. Tap again to turn it.' },
+  { id: 'queue', label: 'Queue', hint: 'Tap a boundary cell to add a queue, or tap one to select it.' },
   { id: 'erase', label: 'Erase', hint: 'Clear whatever is in the cell.' },
 ];
 
@@ -250,13 +250,14 @@ export class EditorApp {
     const valid = boundaryDirs({ cols: this.cols, rows: this.rows, dead: this.dead }, cell);
 
     if (at >= 0) {
-      // Cycle through the valid outward sides, then remove on the way round.
+      // First tap selects it -- that is what exposes the dog count. Tapping the
+      // one already selected turns it. Removing is an explicit button, so a
+      // stray tap can never delete a queue you were only trying to edit.
+      if (this.selectedQueue !== at) { this.selectedQueue = at; return; }
       const q = this.queues[at];
       const order = valid.length ? valid : [...DIRS];
-      const next = order[(order.indexOf(q.dir) + 1) % (order.length + 1)];
-      if (next === undefined) { this.queues.splice(at, 1); this.selectedQueue = -1; return; }
-      q.dir = next;
-      this.selectedQueue = at;
+      const i = order.indexOf(q.dir);
+      q.dir = order[(i + 1) % order.length];
       return;
     }
 
@@ -429,9 +430,14 @@ export class EditorApp {
             <span class="stepper"><button data-act="row-">−</button><b class="dim-rows">10</b><button data-act="row+">+</button></span>
           </label>
           <label>Time <input class="editor-time" type="number" min="5" step="5" /> s</label>
-          <label class="queue-count">Dogs in queue
+        </div>
+        <div class="queue-panel">
+          <span class="queue-where"></span>
+          <label>Dogs
             <span class="stepper"><button data-act="dog-">−</button><b class="dog-n">3</b><button data-act="dog+">+</button></span>
           </label>
+          <button class="btn ghost small" data-act="queue-turn">Turn</button>
+          <button class="btn ghost small" data-act="queue-del">Remove</button>
         </div>
         <ul class="warn-list"></ul>
       </div>
@@ -472,6 +478,8 @@ export class EditorApp {
     on('row+', () => this.resize(0, 1));
     on('dog-', () => this.bumpQueue(-1));
     on('dog+', () => this.bumpQueue(1));
+    on('queue-turn', () => this.turnSelectedQueue());
+    on('queue-del', () => this.removeSelectedQueue());
     on('clear', () => this.clearAll());
     on('test', () => this.opts.onTest(this.snapshot()));
     on('exit', () => this.opts.onExit());
@@ -487,6 +495,24 @@ export class EditorApp {
     const q = this.queues[this.selectedQueue];
     if (!q) return;
     q.count = clamp(q.count + d, 1, 20);
+    this.redraw();
+    this.refreshChrome();
+  }
+
+  private turnSelectedQueue() {
+    const q = this.queues[this.selectedQueue];
+    if (!q) return;
+    const valid = boundaryDirs({ cols: this.cols, rows: this.rows, dead: this.dead }, q.cell);
+    const order = valid.length ? valid : [...DIRS];
+    q.dir = order[(order.indexOf(q.dir) + 1) % order.length];
+    this.redraw();
+    this.refreshChrome();
+  }
+
+  private removeSelectedQueue() {
+    if (this.selectedQueue < 0) return;
+    this.queues.splice(this.selectedQueue, 1);
+    this.selectedQueue = -1;
     this.redraw();
     this.refreshChrome();
   }
@@ -538,10 +564,14 @@ export class EditorApp {
     bar.querySelector('.dim-cols')!.textContent = String(this.cols);
     bar.querySelector('.dim-rows')!.textContent = String(this.rows);
 
-    const qc = bar.querySelector<HTMLElement>('.queue-count')!;
+    const qc = bar.querySelector<HTMLElement>('.queue-panel')!;
     const q = this.queues[this.selectedQueue];
     qc.style.display = q ? 'flex' : 'none';
-    if (q) bar.querySelector('.dog-n')!.textContent = String(q.count);
+    if (q) {
+      bar.querySelector('.dog-n')!.textContent = String(q.count);
+      bar.querySelector('.queue-where')!.textContent =
+        `Queue (${colOf(this.cols, q.cell)}, ${rowOf(this.cols, q.cell)}) facing ${q.dir}`;
+    }
 
     const list = bar.querySelector<HTMLUListElement>('.warn-list')!;
     list.innerHTML = '';
