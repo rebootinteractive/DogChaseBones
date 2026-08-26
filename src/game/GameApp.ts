@@ -232,7 +232,17 @@ export class GameApp {
     if (this.status !== 'playing') return;
     this.status = 'won';
     this.opts.onWin?.();
-    this.showBanner('Every dog fed', 'won');
+    // The clock stops the moment status leaves 'playing', so these are the
+    // numbers at the winning bite.
+    // Round the remainder, then derive what was spent from it, so the two
+    // figures on screen always add up to the limit exactly.
+    const left = Math.max(0, Math.round(this.timeLeft * 10) / 10);
+    const spent = Math.max(0, this.spec.timeLimit - left);
+    this.showBanner(
+      'Every dog fed',
+      'won',
+      `${secs(spent)} of ${secs(this.spec.timeLimit)} used  ·  ${secs(left)} left`,
+    );
   }
 
   private lose() {
@@ -428,14 +438,16 @@ export class GameApp {
     this.backBtn = btn;
   }
 
-  private showBanner(message: string, kind: Status) {
+  private showBanner(message: string, kind: Status, detail?: string) {
     this.banner?.remove();
     const el = document.createElement('div');
     el.className = `result-banner ${kind}`;
-    el.innerHTML = `<p></p><div class="result-actions">
+    el.innerHTML = `<p></p><p class="result-detail"></p><div class="result-actions">
       <button class="btn" data-act="retry">Play again</button>
       <button class="btn ghost" data-act="menu">← Menu</button></div>`;
     el.querySelector('p')!.textContent = message;
+    const detailEl = el.querySelector<HTMLElement>('.result-detail')!;
+    if (detail) detailEl.textContent = detail; else detailEl.remove();
     el.querySelector('[data-act="retry"]')!.addEventListener('click', () => this.restart());
     el.querySelector('[data-act="menu"]')!.addEventListener('click', () => this.opts.onMenu());
     this.parent.appendChild(el);
@@ -465,4 +477,9 @@ export class GameApp {
     // destroys renderer, view canvas, and all stage children/graphics
     this.app.destroy({ removeView: true }, { children: true, texture: true });
   }
+}
+
+/** Seconds to one decimal -- level timers are tuned in small steps. */
+function secs(value: number): string {
+  return `${value.toFixed(1)}s`;
 }

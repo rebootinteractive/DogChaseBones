@@ -47,6 +47,10 @@ canvas { display: block; touch-action: none; }
   background: rgba(14,16,22,.86); backdrop-filter: blur(3px); text-align: center;
 }
 .result-banner p { margin: 0; font-size: 22px; font-weight: 600; }
+.result-detail {
+  font-size: 13px !important; font-weight: 500 !important; color: #8891a8;
+  font-variant-numeric: tabular-nums; margin-top: -8px !important;
+}
 .result-banner.won p { color: #6cc24a; }
 .result-banner.lost p { color: #ff6b6b; }
 .result-actions { display: flex; gap: 10px; }
