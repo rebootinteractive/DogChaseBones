@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BUILTIN_LEVELS } from '../src/levels/builtin';
+import { FIXTURE_LEVELS } from './fixtures/levels';
 import { SCHEMA_VERSION, countBones, countDogs, parseLevel } from '../src/game/level';
 import { createBoard } from '../src/game/board';
 import type { BoardState } from '../src/game/board';
@@ -20,14 +20,14 @@ function playOut(state: BoardState): number {
 }
 
 function boardFor(id: string) {
-  const level = BUILTIN_LEVELS.find((l) => l.id === id)!;
+  const level = FIXTURE_LEVELS.find((l) => l.id === id)!;
   const { spec, issues } = parseLevel(level);
   expect(issues).toEqual([]);
   return { level, spec, state: createBoard(spec) };
 }
 
-describe('every builtin level', () => {
-  it.each(BUILTIN_LEVELS.map((l) => [l.id, l] as const))('%s is structurally sound', (_id, level) => {
+describe('every fixture level', () => {
+  it.each(FIXTURE_LEVELS.map((l) => [l.id, l] as const))('%s is structurally sound', (_id, level) => {
     const { spec, issues } = parseLevel(level);
     expect(issues).toEqual([]);
     expect(validateLevel(spec)).toEqual([]);

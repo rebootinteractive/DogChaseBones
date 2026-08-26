@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PUBLISHED_LEVELS } from '../src/levels/published';
-import { BUILTIN_LEVELS } from '../src/levels/builtin';
 import { mergeLevels } from '../src/levels/merge';
+import { BUILTIN_LEVELS } from '../src/levels/builtin';
 import { validateLevelData } from '../src/levels/serialize';
 import { SCHEMA_VERSION, countBones, countDogs, parseLevel } from '../src/game/level';
 import { createBoard, bonesRemaining } from '../src/game/board';

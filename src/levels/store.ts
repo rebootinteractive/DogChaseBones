@@ -25,9 +25,20 @@ export class LevelStore {
     private builtin: LevelData[],
   ) {}
 
+  /**
+   * True when the last list() could not reach the shared backend. Nothing is
+   * baked into the bundle any more, so an empty menu is ambiguous without this:
+   * it could mean nobody has published a level, or that we simply could not ask.
+   */
+  private fetchFailed = false;
+
   /** Whether levels can be shared with everyone from inside the app. */
   get canPublish(): boolean {
     return this.published !== null;
+  }
+
+  get publishedUnreachable(): boolean {
+    return this.fetchFailed;
   }
 
   async list(): Promise<LevelData[]> {
@@ -36,9 +47,11 @@ export class LevelStore {
     if (this.published) {
       try {
         levels = mergeLevels(levels, await this.published.fetch(this.prototype));
+        this.fetchFailed = false;
       } catch (err) {
-        // Never hard-fail on a network blip: authored levels still play.
+        // Never hard-fail on a network blip: whatever is local still plays.
         console.warn('[LevelStore] could not fetch published levels:', err);
+        this.fetchFailed = true;
       }
     }
 

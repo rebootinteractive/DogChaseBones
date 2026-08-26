@@ -109,3 +109,35 @@ describe('LevelStore.canPublish', () => {
     expect(store({ published: fakeBackend() }).canPublish).toBe(true);
   });
 });
+
+describe('LevelStore.publishedUnreachable', () => {
+  it('is false before anything has been asked', () => {
+    expect(store({ published: fakeBackend() }).publishedUnreachable).toBe(false);
+  });
+
+  it('goes true when the shared fetch fails', async () => {
+    const s = store({ published: fakeBackend({ fetch: vi.fn(async () => { throw new Error('offline'); }) }) });
+    await s.list();
+    expect(s.publishedUnreachable).toBe(true);
+  });
+
+  it('clears again once a fetch succeeds', async () => {
+    let fail = true;
+    const s = store({
+      published: fakeBackend({
+        fetch: vi.fn(async () => { if (fail) throw new Error('offline'); return []; }),
+      }),
+    });
+    await s.list();
+    expect(s.publishedUnreachable).toBe(true);
+    fail = false;
+    await s.list();
+    expect(s.publishedUnreachable).toBe(false);
+  });
+
+  it('stays false when there is no shared backend to be unreachable', async () => {
+    const s = store({ published: null });
+    await s.list();
+    expect(s.publishedUnreachable).toBe(false);
+  });
+});

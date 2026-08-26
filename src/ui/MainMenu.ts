@@ -50,9 +50,25 @@ export class MainMenu {
     exportBtn.disabled = levels.length === 0;
     exportBtn.textContent = levels.length ? `Download all levels (${levels.length})` : 'Download all levels';
 
+    const status = this.root.querySelector<HTMLElement>('.menu-status')!;
+    if (this.opts.store.publishedUnreachable) {
+      status.textContent = 'Could not reach the shared levels. Anything saved here is still yours.';
+      status.classList.remove('live');
+      status.classList.add('warn');
+    }
+
     const list = this.root.querySelector('.menu-list')!;
     list.innerHTML = '';
-    if (!levels.length) { list.textContent = 'No levels yet.'; return; }
+    if (!levels.length) {
+      const empty = document.createElement('p');
+      empty.className = 'menu-empty';
+      // Nothing ships in the bundle, so this is a state players can actually hit.
+      empty.textContent = this.opts.store.publishedUnreachable
+        ? 'No levels to show — the shared levels could not be reached, and this browser has no drafts.'
+        : 'No levels yet. Create one, then Publish it to share it with everyone.';
+      list.appendChild(empty);
+      return;
+    }
 
     for (const lv of levels) {
       const { spec } = parseLevel(lv);
