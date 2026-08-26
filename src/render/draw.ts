@@ -116,3 +116,22 @@ export function drawBeeReachCell(g: Graphics, cam: Camera, cell: number) {
   g.roundRect(x + gap, y + gap, cam.cell - gap * 2, cam.cell - gap * 2, L.cellRadius)
     .fill({ color: C.beeDanger, alpha: 0.1 });
 }
+
+/** Editor: paint a target cell green when a dropped group would fit, red when not. */
+export function drawPlacementCell(g: Graphics, cam: Camera, cell: number, ok: boolean) {
+  const x = cellX(cam, cell);
+  const y = cellY(cam, cell);
+  const gap = L.cellGap;
+  g.roundRect(x + gap, y + gap, cam.cell - gap * 2, cam.cell - gap * 2, L.cellRadius)
+    .fill({ color: ok ? C.placeOk : C.placeBad, alpha: ok ? 0.2 : 0.34 })
+    .stroke({ width: 1.5, color: ok ? C.placeOk : C.placeBad, alpha: 0.85 });
+}
+
+/** Editor: the footprint a group is being dragged away from. */
+export function drawVacatedCell(g: Graphics, cam: Camera, cell: number) {
+  const x = cellX(cam, cell);
+  const y = cellY(cam, cell);
+  const i = L.blockInset;
+  g.roundRect(x + i, y + i, cam.cell - i * 2, cam.cell - i * 2, L.blockRadius)
+    .stroke({ width: 1.5, color: C.ghost, alpha: 0.5 });
+}

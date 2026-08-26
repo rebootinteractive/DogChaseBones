@@ -8,9 +8,15 @@ import type { Dir } from '../game/cells';
 import { MAX_DIM, MIN_DIM, parseLevel } from '../game/level';
 import { boundaryDirs } from '../game/board';
 import { validateLevel } from '../game/validate';
-import { cellAt, cellCenter, colRowCenter, computeEditorCamera } from '../game/camera';
+import { cellAt, cellCenter, colRowCenter, computeEditorCamera, toCellDelta } from '../game/camera';
 import type { Camera } from '../game/camera';
-import { drawBee, drawBlockGroup, drawBone, drawCell, drawDog, drawWall } from '../render/draw';
+import { cellsOfGroup, evaluatePlacement } from '../game/place';
+import type { Placement } from '../game/place';
+import { groupTint } from '../render/color';
+import {
+  drawBee, drawBlockGroup, drawBone, drawCell, drawDog,
+  drawPlacementCell, drawVacatedCell, drawWall,
+} from '../render/draw';
 
 export interface EditorOptions {
   store: LevelStore;
@@ -20,18 +26,30 @@ export interface EditorOptions {
   onTest: (level: LevelData) => void;
 }
 
-type Tool = 'block' | 'bone' | 'wall' | 'bee' | 'dead' | 'queue' | 'erase';
+type Tool = 'block' | 'move' | 'bone' | 'wall' | 'bee' | 'dead' | 'queue' | 'erase';
 
 interface EditorQueue { cell: number; dir: Dir; count: number }
+
+/** A block group picked up with the Move tool and not yet dropped. */
+interface MoveDrag {
+  group: string;
+  /** The group's cells before the drag started. */
+  cells: number[];
+  /** Which of those carry a bone, so the bones travel with their units. */
+  bones: number[];
+  originX: number;
+  originY: number;
+  dc: number;
+  dr: number;
+  placement: Placement;
+}
 
 const C = SETTINGS.colors;
 const L = SETTINGS.layout;
 
-/** Groups are tinted while authoring so flush-but-separate groups stay visible. */
-const GROUP_TINTS = [0xc9782f, 0x6cc24a, 0x4d96ff, 0xb46bd8, 0xe05d5d, 0x2fb8a8, 0xd8b23a, 0xe0803f];
-
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'block', label: 'Block', hint: 'Tap cells to add them to the active group.' },
+  { id: 'move', label: 'Move', hint: 'Drag a whole block group somewhere else. Red means it will not fit.' },
   { id: 'bone', label: 'Bone', hint: 'Bones ride block units — tap a block.' },
   { id: 'wall', label: 'Wall', hint: 'Static, unmovable, blocks everything.' },
   { id: 'bee', label: 'Bee', hint: 'Fixed. Poisons every cell it can reach.' },
@@ -69,6 +87,7 @@ export class EditorApp {
   private cam!: Camera;
   private painting = false;
   private lastPainted: number | null = null;
+  private moveDrag: MoveDrag | null = null;
   private selectedQueue = -1;
 
   private host?: HTMLDivElement;
@@ -181,12 +200,14 @@ export class EditorApp {
   private onDown = (e: FederatedPointerEvent) => {
     const cell = this.cellUnder(e);
     if (cell === null) return;
+    if (this.tool === 'move') { this.beginMove(cell, e); return; }
     this.painting = true;
     this.lastPainted = null;
     this.apply(cell);
   };
 
   private onMove = (e: FederatedPointerEvent) => {
+    if (this.moveDrag) { this.updateMove(e); return; }
     if (!this.painting) return;
     // Queue direction cycling would fire repeatedly under a drag; keep it to taps.
     if (this.tool === 'queue') return;
@@ -195,7 +216,11 @@ export class EditorApp {
     this.apply(cell);
   };
 
-  private onUp = () => { this.painting = false; this.lastPainted = null; };
+  private onUp = () => {
+    if (this.moveDrag) { this.endMove(); return; }
+    this.painting = false;
+    this.lastPainted = null;
+  };
 
   private cellUnder(e: FederatedPointerEvent): number | null {
     const p = this.app.stage.toLocal(e.global);
@@ -215,6 +240,62 @@ export class EditorApp {
     }
     this.redraw();
     this.refreshChrome();
+  }
+
+  // ------------------------------------------------------------------ move ---
+
+  private beginMove(cell: number, e: FederatedPointerEvent) {
+    const group = this.units.get(cell);
+    if (!group) { this.flash('Nothing to move here — grab a block.'); return; }
+
+    const p = this.app.stage.toLocal(e.global);
+    const cells = cellsOfGroup(this.units, group);
+    this.moveDrag = {
+      group, cells,
+      bones: cells.filter((c) => this.bones.has(c)),
+      originX: p.x, originY: p.y,
+      dc: 0, dr: 0,
+      placement: this.placementFor(cells, group, 0, 0),
+    };
+    this.redraw();
+  }
+
+  private updateMove(e: FederatedPointerEvent) {
+    const drag = this.moveDrag;
+    if (!drag) return;
+    const p = this.app.stage.toLocal(e.global);
+    const { dc, dr } = toCellDelta(this.cam, p.x - drag.originX, p.y - drag.originY);
+    if (dc === drag.dc && dr === drag.dr) return;
+    drag.dc = dc;
+    drag.dr = dr;
+    drag.placement = this.placementFor(drag.cells, drag.group, dc, dr);
+    this.redraw();
+  }
+
+  /** Commit the move if it fits; otherwise the group snaps back untouched. */
+  private endMove() {
+    const drag = this.moveDrag;
+    this.moveDrag = null;
+    if (!drag) return;
+
+    if (drag.placement.ok && (drag.dc !== 0 || drag.dr !== 0)) {
+      for (const cell of drag.cells) { this.units.delete(cell); this.bones.delete(cell); }
+      drag.cells.forEach((cell, i) => {
+        const target = drag.placement.targets[i];
+        this.units.set(target, drag.group);
+        if (drag.bones.includes(cell)) this.bones.add(target);
+      });
+    } else if (!drag.placement.ok) {
+      this.flash('That does not fit — the group went back.');
+    }
+
+    this.redraw();
+    this.refreshChrome();
+  }
+
+  private placementFor(cells: number[], group: string, dc: number, dr: number): Placement {
+    const board = { cols: this.cols, rows: this.rows, dead: this.dead, walls: this.walls, bees: this.bees, units: this.units };
+    return evaluatePlacement(board, cells, group, dc, dr);
   }
 
   private applyBlock(cell: number) {
@@ -290,8 +371,10 @@ export class EditorApp {
     this.boardG.clear();
     for (const cell of this.walls) drawWall(this.boardG, this.cam, cell);
 
+    const dragging = this.moveDrag;
     const byGroup = new Map<string, Set<number>>();
     for (const [cell, group] of this.units) {
+      if (dragging && group === dragging.group) continue;   // drawn as a ghost below
       let set = byGroup.get(group);
       if (!set) { set = new Set(); byGroup.set(group, set); }
       set.add(cell);
@@ -300,6 +383,7 @@ export class EditorApp {
       drawBlockGroup(this.boardG, this.cam, cells, this.tintFor(group));
     }
     for (const cell of this.bones) {
+      if (dragging && dragging.cells.includes(cell)) continue;
       const p = cellCenter(this.cam, cell);
       drawBone(this.boardG, p.x, p.y, this.cam.cell);
     }
@@ -308,7 +392,35 @@ export class EditorApp {
       drawBee(this.boardG, p.x, p.y, this.cam.cell);
     }
 
+    if (dragging) this.drawMoveGhost(dragging);
     this.drawQueues();
+  }
+
+  /**
+   * The group under the finger: its old footprint outlined, every target cell
+   * painted green or red, and the group itself drawn where it would land.
+   */
+  private drawMoveGhost(drag: MoveDrag) {
+    const { placement } = drag;
+    const blocked = new Set(placement.blocked);
+
+    for (const cell of drag.cells) drawVacatedCell(this.boardG, this.cam, cell);
+
+    for (const target of placement.targets) {
+      if (target < 0) continue;   // off the grid; nothing to paint
+      drawPlacementCell(this.boardG, this.cam, target, !blocked.has(target) && !placement.offGrid);
+    }
+
+    const landing = new Set(placement.targets.filter((t) => t >= 0));
+    if (landing.size) {
+      drawBlockGroup(this.boardG, this.cam, landing, this.tintFor(drag.group));
+      for (let i = 0; i < drag.cells.length; i++) {
+        const target = placement.targets[i];
+        if (target < 0 || !drag.bones.includes(drag.cells[i])) continue;
+        const p = cellCenter(this.cam, target);
+        drawBone(this.boardG, p.x, p.y, this.cam.cell);
+      }
+    }
   }
 
   private drawQueues() {
@@ -347,9 +459,14 @@ export class EditorApp {
     });
   }
 
+  /**
+   * Groups are tinted while authoring so two flush-but-separate groups are
+   * obviously separate. A group not in the list gets the next free slot rather
+   * than silently sharing colour one.
+   */
   private tintFor(group: string): number {
-    const i = this.groups.indexOf(group);
-    return GROUP_TINTS[(i < 0 ? 0 : i) % GROUP_TINTS.length];
+    const known = this.groups.indexOf(group);
+    return groupTint(known < 0 ? this.groups.length : known, SETTINGS.editor.groupTints);
   }
 
   // ------------------------------------------------------------ level i/o ---

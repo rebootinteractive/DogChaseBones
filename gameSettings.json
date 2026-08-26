@@ -23,7 +23,14 @@
     "padCells": 1.7,
     "minCellSize": 10,
     "maxCellSize": 84,
-    "panelWidth": 340
+    "panelWidth": 340,
+    "$groupTints": "Block-group colours in the editor only - the game paints every group with colors.block. Add as many as you like; once the list runs out it is reused at a different lightness rather than starting over, so groups stay tellable apart.",
+    "groupTints": [
+      "#e0553f", "#e08a2f", "#d8b23a", "#a8c23a",
+      "#6cc24a", "#3fbf7a", "#2fb8a8", "#35a8d8",
+      "#4d96ff", "#6f7fe8", "#9a6be0", "#c063d8",
+      "#e05aa8", "#e0577a", "#b0785a", "#8f9bb3"
+    ]
   },
 
   "layout": {
@@ -60,7 +67,7 @@
     "bee": "#f2c53d",
     "beeStroke": "#8a6a10",
     "beeStripe": "#2b2410",
-    "beeDanger": "#f2c53d",
+    "beeDanger": "#ff0000",
     "dog": "#8c5a3c",
     "dogStroke": "#5d3a24",
     "dogSnout": "#3d2718",
@@ -69,7 +76,10 @@
     "badgeFill": "#0e1016",
     "badgeStroke": "#4d96ff",
     "badgeText": "#8fc0ff",
-    "editorGuide": "#4d96ff"
+    "editorGuide": "#4d96ff",
+    "placeOk": "#6cc24a",
+    "placeBad": "#ff6b6b",
+    "ghost": "#8891a8"
   },
 
   "debug": {
