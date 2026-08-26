@@ -1,0 +1,138 @@
+{
+  "id": "b3-sealed-room",
+  "name": "Bee-Mid/Easy",
+  "prototype": "dog-chase-bones",
+  "elements": [
+    {
+      "type": "wall",
+      "x": 0,
+      "y": 2
+    },
+    {
+      "type": "wall",
+      "x": 4,
+      "y": 2
+    },
+    {
+      "type": "wall",
+      "x": 5,
+      "y": 2
+    },
+    {
+      "type": "bee",
+      "x": 2,
+      "y": 4
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 0,
+      "group": "a"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 0,
+      "group": "a"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 1,
+      "group": "p"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 3,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 4,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 5,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 5,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 3,
+      "group": "g2"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 3,
+      "group": "g2"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 4,
+      "group": "g2"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 0,
+      "group": "g3"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 1,
+      "group": "g3"
+    },
+    {
+      "type": "bone",
+      "x": 3,
+      "y": 0
+    },
+    {
+      "type": "bone",
+      "x": 5,
+      "y": 5
+    },
+    {
+      "type": "bone",
+      "x": 0,
+      "y": 3
+    },
+    {
+      "type": "bone",
+      "x": 5,
+      "y": 0
+    },
+    {
+      "type": "queue",
+      "x": 0,
+      "y": 0,
+      "dir": "up",
+      "count": 2
+    },
+    {
+      "type": "queue",
+      "x": 3,
+      "y": 5,
+      "dir": "down",
+      "count": 2
+    }
+  ],
+  "meta": {
+    "cols": 6,
+    "rows": 6,
+    "timeLimit": 150
+  }
+}

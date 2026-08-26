@@ -1,0 +1,343 @@
+{
+  "id": "custom-896e8e49-85ea-4a2b-b604-f093c20cbd81",
+  "name": "Mid-Hard",
+  "prototype": "dog-chase-bones",
+  "elements": [
+    {
+      "type": "wall",
+      "x": 0,
+      "y": 5
+    },
+    {
+      "type": "wall",
+      "x": 1,
+      "y": 5
+    },
+    {
+      "type": "wall",
+      "x": 5,
+      "y": 5
+    },
+    {
+      "type": "wall",
+      "x": 4,
+      "y": 5
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 3,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 3,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 3,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 3,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 3,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 3,
+      "group": "g1"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 5,
+      "group": "g3"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 5,
+      "group": "g3"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 4,
+      "group": "g3"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 4,
+      "group": "g3"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 6,
+      "group": "g4"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 7,
+      "group": "g4"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 7,
+      "group": "g4"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 6,
+      "group": "g4"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 8,
+      "group": "g5"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 8,
+      "group": "g5"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 8,
+      "group": "g5"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 6,
+      "group": "g6"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 6,
+      "group": "g6"
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 9,
+      "group": "g7"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 9,
+      "group": "g7"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 9,
+      "group": "g7"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 9,
+      "group": "g7"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 0,
+      "group": "g8"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 0,
+      "group": "g8"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 1,
+      "group": "g8"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 0,
+      "group": "g9"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 2,
+      "group": "g9"
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 2,
+      "group": "g9"
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 1,
+      "group": "g9"
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 0,
+      "group": "g9"
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 8,
+      "group": "g7"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 7,
+      "group": "g6"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 8,
+      "group": "g6"
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 4,
+      "group": "g11"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 4,
+      "group": "g11"
+    },
+    {
+      "type": "block",
+      "x": 5,
+      "y": 2,
+      "group": "g8"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 0,
+      "group": "g2"
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 1,
+      "group": "g2"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 1,
+      "group": "g2"
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 2,
+      "group": "g2"
+    },
+    {
+      "type": "block",
+      "x": 1,
+      "y": 1,
+      "group": "g2"
+    },
+    {
+      "type": "bone",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "type": "bone",
+      "x": 3,
+      "y": 3
+    },
+    {
+      "type": "bone",
+      "x": 1,
+      "y": 9
+    },
+    {
+      "type": "bone",
+      "x": 0,
+      "y": 3
+    },
+    {
+      "type": "bone",
+      "x": 5,
+      "y": 4
+    },
+    {
+      "type": "bone",
+      "x": 4,
+      "y": 6
+    },
+    {
+      "type": "bone",
+      "x": 5,
+      "y": 1
+    },
+    {
+      "type": "bone",
+      "x": 3,
+      "y": 1
+    },
+    {
+      "type": "bone",
+      "x": 2,
+      "y": 5
+    },
+    {
+      "type": "queue",
+      "x": 2,
+      "y": 9,
+      "dir": "down",
+      "count": 4
+    },
+    {
+      "type": "queue",
+      "x": 2,
+      "y": 0,
+      "dir": "up",
+      "count": 5
+    }
+  ],
+  "meta": {
+    "cols": 6,
+    "rows": 10,
+    "timeLimit": 120
+  }
+}

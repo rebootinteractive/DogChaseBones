@@ -2,6 +2,7 @@ import { MainMenu } from './ui/MainMenu';
 import { GameApp } from './game/GameApp';
 import { EditorApp } from './editor/EditorApp';
 import { LevelStore } from './levels/store';
+import { mergeLevels } from './levels/merge';
 import { SupabaseBackend } from './levels/supabaseBackend';
 import { LocalDraftBackend } from './levels/localBackend';
 import { BUILTIN_LEVELS } from './levels/builtin';
@@ -11,7 +12,10 @@ import type { LevelData } from './shared/types';
 
 const appEl = document.getElementById('app')!;
 const backend = HAS_BACKEND ? new SupabaseBackend() : new LocalDraftBackend(PROTOTYPE);
-const store = new LevelStore(PROTOTYPE, backend, [...BUILTIN_LEVELS, ...PUBLISHED_LEVELS]);
+// Published levels replace a same-id builtin in place rather than sitting
+// alongside it -- editing a baseline in the editor keeps its id, and showing
+// both the original and the edited copy would be two cards for one level.
+const store = new LevelStore(PROTOTYPE, backend, mergeLevels(BUILTIN_LEVELS, PUBLISHED_LEVELS));
 
 let current: { dispose(): void } | undefined;
 function clearApp() { current?.dispose(); current = undefined; }
