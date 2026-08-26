@@ -20,6 +20,17 @@ create table if not exists public.levels (
 
 create index if not exists levels_prototype_idx on public.levels (prototype);
 
+-- Two separate locks guard this table, and both must be opened.
+--
+-- 1. GRANTs decide whether the API can see the table at all. Newer projects do
+--    not expose new tables automatically (and from 30 May 2026 that is the
+--    default), so these are stated explicitly rather than relying on the
+--    "Automatically expose new tables" setting. Harmless if it is already on.
+--    No delete grant: the anon role cannot delete a level even by mistake.
+grant usage on schema public to anon;
+grant select, insert, update on public.levels to anon;
+
+-- 2. Row Level Security decides which rows it may touch once it can see them.
 alter table public.levels enable row level security;
 
 -- Open policy: prototyping has no auth. Tighten later if needed.
