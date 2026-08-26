@@ -50,6 +50,7 @@ multi-queue system on the grid edges.
 | `src/levels/builtin.ts` | The three baseline levels, authored as ASCII. |
 | `src/levels/published/` | Levels published from the editor and committed here. |
 | `docs/level-data.md` | The level format, and the rules for sharing it with Unity. |
+| `docs/soft-locks.md` | Which levels can be made unwinnable, and why bees are the only cause. |
 | `docs/supabase-schema.sql` | Run once in the shared studio project. |
 
 ## Tuning

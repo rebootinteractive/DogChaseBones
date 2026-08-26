@@ -1,0 +1,89 @@
+{
+  "id": "sl-two-bees",
+  "name": "Soft-lock - two bees",
+  "prototype": "dog-chase-bones",
+  "elements": [
+    {
+      "type": "block",
+      "x": 1,
+      "y": 1,
+      "group": "d"
+    },
+    {
+      "type": "bone",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 1,
+      "group": "p"
+    },
+    {
+      "type": "wall",
+      "x": 1,
+      "y": 2
+    },
+    {
+      "type": "wall",
+      "x": 3,
+      "y": 2
+    },
+    {
+      "type": "wall",
+      "x": 4,
+      "y": 2
+    },
+    {
+      "type": "bee",
+      "x": 0,
+      "y": 3
+    },
+    {
+      "type": "wall",
+      "x": 1,
+      "y": 3
+    },
+    {
+      "type": "block",
+      "x": 2,
+      "y": 3,
+      "group": "c"
+    },
+    {
+      "type": "bone",
+      "x": 2,
+      "y": 3
+    },
+    {
+      "type": "block",
+      "x": 3,
+      "y": 3,
+      "group": "c"
+    },
+    {
+      "type": "wall",
+      "x": 4,
+      "y": 3
+    },
+    {
+      "type": "bee",
+      "x": 5,
+      "y": 3
+    },
+    {
+      "type": "queue",
+      "x": 0,
+      "y": 0,
+      "dir": "up",
+      "count": 2
+    }
+  ],
+  "meta": {
+    "schema": 1,
+    "cols": 6,
+    "rows": 4,
+    "timeLimit": 120
+  }
+}
