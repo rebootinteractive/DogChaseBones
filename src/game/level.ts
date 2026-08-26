@@ -10,7 +10,9 @@ import { idx, inBounds, isDir, type Dir } from './cells';
 //   { type: 'wall',  x, y }                     static, unmovable, blocks everything
 //   { type: 'bee',   x, y }                     fixed; poisons every cell it can reach
 //   { type: 'block', x, y, group }              one unit block belonging to `group`
-//   { type: 'bone',  x, y }                     rides the block unit in the same cell
+//   { type: 'bone',  x, y, count? }             rides the block unit in the same cell.
+//                                               count defaults to 1 and stacks, so
+//                                               repeated bone elements also add up.
 //   { type: 'queue', x, y, dir, count }         entry cell; dogs line up towards `dir`
 //
 // meta: { cols, rows, timeLimit }
@@ -25,7 +27,8 @@ export const MAX_DIM = 14;
 export interface BlockUnit {
   cell: number;
   group: string;
-  bone: boolean;
+  /** How many bones ride this unit. The unit survives until the last one goes. */
+  bones: number;
   /** Dormant in v1 -- reserved for colour-matched dogs and bones. */
   colorKey?: string;
 }
@@ -79,7 +82,7 @@ export function parseLevel(level: LevelData): ParseResult {
   // One occupant per cell: dead / wall / bee / block are mutually exclusive.
   const occupant = new Map<number, string>();
   const unitAt = new Map<number, BlockUnit>();
-  const bones: number[] = [];
+  const bones: Array<{ cell: number; count: number }> = [];
   let queueSeq = 0;
 
   const cellOf = (el: GameElement): number | null => {
@@ -99,7 +102,11 @@ export function parseLevel(level: LevelData): ParseResult {
       continue;
     }
 
-    if (el.type === 'bone') { bones.push(cell); continue; }
+    if (el.type === 'bone') {
+      const raw = num(el.count);
+      bones.push({ cell, count: Math.max(1, Math.round(raw ?? 1)) });
+      continue;
+    }
 
     if (el.type === 'queue') {
       const dir = isDir(el.dir) ? el.dir : 'up';
@@ -121,7 +128,7 @@ export function parseLevel(level: LevelData): ParseResult {
       case 'bee': spec.bees.add(cell); occupant.set(cell, 'bee'); break;
       case 'block': {
         const group = typeof el.group === 'string' && el.group ? el.group : `g-${cell}`;
-        const unit: BlockUnit = { cell, group, bone: false };
+        const unit: BlockUnit = { cell, group, bones: 0 };
         if (typeof el.colorKey === 'string') unit.colorKey = el.colorKey;
         spec.units.push(unit);
         unitAt.set(cell, unit);
@@ -134,17 +141,18 @@ export function parseLevel(level: LevelData): ParseResult {
   }
 
   // Bones ride block units. A bone with no host is not representable at runtime.
-  for (const cell of bones) {
+  for (const { cell, count } of bones) {
     const host = unitAt.get(cell);
     if (!host) { issues.push(`bone at cell ${cell} dropped -- no block unit to ride`); continue; }
-    host.bone = true;
+    host.bones += count;
   }
 
   return { spec, issues };
 }
 
+/** Total bones on the board, counting a stacked unit once per bone. */
 export function countBones(spec: LevelSpec): number {
-  return spec.units.reduce((n, u) => n + (u.bone ? 1 : 0), 0);
+  return spec.units.reduce((n, u) => n + u.bones, 0);
 }
 
 export function countDogs(spec: LevelSpec): number {

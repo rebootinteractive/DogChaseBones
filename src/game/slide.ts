@@ -13,6 +13,10 @@ export function canStepGroup(state: BoardState, group: string, dc: number, dr: n
   if (dc === 0 && dr === 0) return false;
 
   for (const cell of cells) {
+    // A dog has committed to a bone on this group. The group is pinned until it
+    // finishes -- otherwise the bone could be slid out from under the dog.
+    if (state.reserved.has(cell)) return false;
+
     const c = colOf(state.cols, cell) + dc;
     const r = rowOf(state.cols, cell) + dr;
     if (!inBounds(state.cols, state.rows, c, r)) return false;

@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js';
+import { Application, Container, Graphics, Rectangle } from 'pixi.js';
 import type { FederatedPointerEvent } from 'pixi.js';
 import type { GameElement, LevelData } from '../shared/types';
 import type { LevelStore } from '../levels/store';
@@ -13,8 +13,9 @@ import type { Camera } from '../game/camera';
 import { componentAt, evaluatePlacement } from '../game/place';
 import type { Placement, PlacementBoard } from '../game/place';
 import { groupTint } from '../render/color';
+import { LabelPool } from '../render/labels';
 import {
-  drawBee, drawBlockGroup, drawBone, drawCell, drawDog,
+  drawBee, drawBlockGroup, drawBone, drawBonePip, drawCell, drawDog,
   drawPlacementCell, drawVacatedCell, drawWall,
 } from '../render/draw';
 
@@ -35,8 +36,8 @@ interface MoveDrag {
   group: string;
   /** The group's cells before the drag started. */
   cells: number[];
-  /** Which of those carry a bone, so the bones travel with their units. */
-  bones: number[];
+  /** Bone counts on those cells, so stacks travel with their units. */
+  bones: Map<number, number>;
   originX: number;
   originY: number;
   dc: number;
@@ -50,10 +51,13 @@ const L = SETTINGS.layout;
 /** Group slots reachable from the keyboard. Beyond this, use the chips. */
 const KEY_GROUP_SLOTS = 9;
 
+/** Most bones one unit may carry. Deep enough to be useful, shallow enough to read. */
+const MAX_BONES_PER_UNIT = 9;
+
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'block', label: 'Block', hint: 'Tap cells to add them to the active group.' },
   { id: 'move', label: 'Move', hint: 'Drag a whole block group somewhere else. Red means it will not fit.' },
-  { id: 'bone', label: 'Bone', hint: 'Bones ride block units — tap a block.' },
+  { id: 'bone', label: 'Bone', hint: 'Tap a block to add a bone; shift-tap takes one off. A stacked unit survives until its last bone.' },
   { id: 'wall', label: 'Wall', hint: 'Static, unmovable, blocks everything.' },
   { id: 'bee', label: 'Bee', hint: 'Fixed. Poisons every cell it can reach.' },
   { id: 'dead', label: 'Off', hint: 'Switch a cell off. Use these to split islands.' },
@@ -67,7 +71,8 @@ export class EditorApp {
   private gridG = new Graphics();
   private boardG = new Graphics();
   private overlayG = new Graphics();
-  private labels = new Container();
+  private boneLabels = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
+  private queueLabels = new LabelPool({ fill: C.badgeText, fontSize: 11, fontFamily: 'system-ui, sans-serif' });
 
   private cols: number;
   private rows: number;
@@ -79,7 +84,8 @@ export class EditorApp {
   private walls = new Set<number>();
   private bees = new Set<number>();
   private units = new Map<number, string>();   // cell -> group id
-  private bones = new Set<number>();
+  /** cell -> how many bones ride the unit there. */
+  private bones = new Map<number, number>();
   private queues: EditorQueue[] = [];
 
   private groups: string[] = ['g1'];
@@ -129,7 +135,11 @@ export class EditorApp {
         case 'dead': this.dead.add(cell); break;
         case 'wall': this.walls.add(cell); break;
         case 'bee': this.bees.add(cell); break;
-        case 'bone': this.bones.add(cell); break;
+        case 'bone': {
+          const add = Math.max(1, Math.round(Number(el.count) || 1));
+          this.bones.set(cell, Math.min(MAX_BONES_PER_UNIT, (this.bones.get(cell) ?? 0) + add));
+          break;
+        }
         case 'block': {
           const group = typeof el.group === 'string' && el.group ? el.group : 'g1';
           this.units.set(cell, group);
@@ -157,7 +167,7 @@ export class EditorApp {
       this.groupSeq = this.groups.reduce((n, g) => Math.max(n, Number(g.replace(/\D/g, '')) || 0), 0);
     }
     // A bone with no block underneath is not representable at runtime; drop it.
-    for (const cell of [...this.bones]) if (!this.units.has(cell)) this.bones.delete(cell);
+    for (const cell of [...this.bones.keys()]) if (!this.units.has(cell)) this.bones.delete(cell);
   }
 
   private async init() {
@@ -177,7 +187,7 @@ export class EditorApp {
     await this.app.init({ width: 1, height: 1, background: C.background, antialias: true });
     scene.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
-    this.root.addChild(this.gridG, this.boardG, this.overlayG, this.labels);
+    this.root.addChild(this.gridG, this.boardG, this.overlayG, this.boneLabels.view, this.queueLabels.view);
     this.app.stage.addChild(this.root);
 
     this.app.stage.eventMode = 'static';
@@ -213,7 +223,7 @@ export class EditorApp {
     if (this.tool === 'move') { this.beginMove(cell, e); return; }
     this.painting = true;
     this.lastPainted = null;
-    this.apply(cell);
+    this.apply(cell, e.shiftKey);
   };
 
   private onMove = (e: FederatedPointerEvent) => {
@@ -223,7 +233,7 @@ export class EditorApp {
     if (this.tool === 'queue') return;
     const cell = this.cellUnder(e);
     if (cell === null || cell === this.lastPainted) return;
-    this.apply(cell);
+    this.apply(cell, e.shiftKey);
   };
 
   private onUp = () => {
@@ -277,11 +287,11 @@ export class EditorApp {
     return cellAt(this.cam, p.x, p.y);
   }
 
-  private apply(cell: number) {
+  private apply(cell: number, shift = false) {
     this.lastPainted = cell;
     switch (this.tool) {
       case 'block': this.applyBlock(cell); break;
-      case 'bone': this.applyBone(cell); break;
+      case 'bone': this.applyBone(cell, shift); break;
       case 'wall': this.toggleTerrain(this.walls, cell); break;
       case 'bee': this.toggleTerrain(this.bees, cell); break;
       case 'dead': this.toggleDead(cell); break;
@@ -304,7 +314,7 @@ export class EditorApp {
     const cells = componentAt(this.placementBoard(), cell);
     this.moveDrag = {
       group, cells,
-      bones: cells.filter((c) => this.bones.has(c)),
+      bones: new Map(cells.filter((c) => this.bones.has(c)).map((c) => [c, this.bones.get(c)!])),
       originX: p.x, originY: p.y,
       dc: 0, dr: 0,
       placement: this.placementFor(cells, 0, 0),
@@ -335,7 +345,8 @@ export class EditorApp {
       drag.cells.forEach((cell, i) => {
         const target = drag.placement.targets[i];
         this.units.set(target, drag.group);
-        if (drag.bones.includes(cell)) this.bones.add(target);
+        const carried = drag.bones.get(cell);
+        if (carried !== undefined) this.bones.set(target, carried);
       });
     } else if (!drag.placement.ok) {
       this.flash('That does not fit — the group went back.');
@@ -362,9 +373,16 @@ export class EditorApp {
     this.units.set(cell, this.activeGroup);   // reassigns a unit from another group
   }
 
-  private applyBone(cell: number) {
+  private applyBone(cell: number, remove: boolean) {
     if (!this.units.has(cell)) { this.flash('Bones ride block units — put a block here first.'); return; }
-    if (this.bones.has(cell)) this.bones.delete(cell); else this.bones.add(cell);
+    const have = this.bones.get(cell) ?? 0;
+
+    if (remove) {
+      if (have <= 1) this.bones.delete(cell); else this.bones.set(cell, have - 1);
+      return;
+    }
+    if (have >= MAX_BONES_PER_UNIT) { this.flash(`One unit carries at most ${MAX_BONES_PER_UNIT} bones.`); return; }
+    this.bones.set(cell, have + 1);
   }
 
   private toggleTerrain(set: Set<number>, cell: number) {
@@ -420,6 +438,8 @@ export class EditorApp {
   // --------------------------------------------------------------- render ---
 
   private redraw() {
+    this.boneLabels.begin();
+    this.queueLabels.begin();
     this.gridG.clear();
     for (let i = 0; i < this.cols * this.rows; i++) drawCell(this.gridG, this.cam, i, this.dead.has(i));
 
@@ -437,10 +457,10 @@ export class EditorApp {
     for (const [group, cells] of byGroup) {
       drawBlockGroup(this.boardG, this.cam, cells, this.tintFor(group));
     }
-    for (const cell of this.bones) {
+    for (const [cell, count] of this.bones) {
       if (dragging && dragging.cells.includes(cell)) continue;
       const p = cellCenter(this.cam, cell);
-      drawBone(this.boardG, p.x, p.y, this.cam.cell);
+      this.paintBone(p.x, p.y, count);
     }
     for (const cell of this.bees) {
       const p = cellCenter(this.cam, cell);
@@ -449,6 +469,8 @@ export class EditorApp {
 
     if (dragging) this.drawMoveGhost(dragging);
     this.drawQueues();
+    this.boneLabels.end();
+    this.queueLabels.end();
   }
 
   /**
@@ -471,16 +493,28 @@ export class EditorApp {
       drawBlockGroup(this.boardG, this.cam, landing, this.tintFor(drag.group));
       for (let i = 0; i < drag.cells.length; i++) {
         const target = placement.targets[i];
-        if (target < 0 || !drag.bones.includes(drag.cells[i])) continue;
+        const carried = drag.bones.get(drag.cells[i]);
+        if (target < 0 || carried === undefined) continue;
         const p = cellCenter(this.cam, target);
-        drawBone(this.boardG, p.x, p.y, this.cam.cell);
+        this.paintBone(p.x, p.y, carried);
       }
     }
   }
 
+  /** A bone, plus its count when the unit carries a stack. */
+  private paintBone(x: number, y: number, count: number) {
+    drawBone(this.boardG, x, y, this.cam.cell);
+    if (count <= 1) return;
+    const r = this.cam.cell * 0.21;
+    const px = x + this.cam.cell * 0.29;
+    const py = y + this.cam.cell * 0.29;
+    drawBonePip(this.boardG, px, py, r);
+    this.boneLabels.add(px, py, String(count), r / 9);
+  }
+
   private drawQueues() {
     this.overlayG.clear();
-    for (const label of this.labels.removeChildren()) label.destroy();
+    const labelScale = Math.max(0.55, Math.min(1.3, this.cam.cell / 46));
 
     this.queues.forEach((q, i) => {
       const { dc, dr } = DIR_VEC[q.dir];
@@ -503,14 +537,13 @@ export class EditorApp {
           .stroke({ width: 2, color: C.editorGuide });
       }
 
-      const label = new Text({
-        text: `x${q.count}`,
-        style: new TextStyle({ fill: C.badgeText, fontSize: 11, fontFamily: 'system-ui, sans-serif' }),
-      });
-      label.anchor.set(0.5);
       const off = this.cam.cell * 0.62;
-      label.position.set(at.x + (dr !== 0 ? off : 0), at.y + (dc !== 0 ? -off : 0));
-      this.labels.addChild(label);
+      this.queueLabels.add(
+        at.x + (dr !== 0 ? off : 0),
+        at.y + (dc !== 0 ? -off : 0),
+        `x${q.count}`,
+        labelScale,
+      );
     });
   }
 
@@ -535,7 +568,7 @@ export class EditorApp {
     for (const cell of this.walls) push('wall', cell);
     for (const cell of this.bees) push('bee', cell);
     for (const [cell, group] of this.units) push('block', cell, { group });
-    for (const cell of this.bones) push('bone', cell);
+    for (const [cell, count] of this.bones) push('bone', cell, { count });
     for (const q of this.queues) push('queue', q.cell, { dir: q.dir, count: q.count });
 
     return {
@@ -567,7 +600,7 @@ export class EditorApp {
     const keys = (src: Set<number>) => new Set(remap([...src].map((c) => [c, true] as [number, boolean])).map(([c]) => c));
 
     const nextUnits = new Map(remap(this.units));
-    const nextBones = keys(this.bones);
+    const nextBones = new Map(remap(this.bones));
     this.walls = keys(this.walls);
     this.bees = keys(this.bees);
     this.dead = keys(this.dead);
@@ -844,6 +877,8 @@ export class EditorApp {
     if (this.saveResetTimer) clearTimeout(this.saveResetTimer);
     this.units.clear();
     this.queues = [];
+    this.boneLabels.destroy();
+    this.queueLabels.destroy();
     // destroys renderer, view canvas, and all stage children/graphics
     this.app.destroy({ removeView: true }, { children: true, texture: true });
   }

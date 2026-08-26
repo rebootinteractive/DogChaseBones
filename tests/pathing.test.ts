@@ -48,29 +48,29 @@ describe('findRoute', () => {
 
   it('walks open cells and stops beside the bone', () => {
     const b = boardFromAscii(['..A.', '####']);
-    const route = findRoute(b, queue(0), new Set(), new Set());
+    const route = findRoute(b, queue(0), new Set(), new Map());
     expect(route).toEqual({ path: [0, 1], boneCell: 2 });
   });
 
   it('refuses to go while a bee can reach the corridor', () => {
     const b = boardFromAscii(['..A.', '....', '.*..']);
-    expect(findRoute(b, queue(0), beeReach(b), new Set())).toBeNull();
+    expect(findRoute(b, queue(0), beeReach(b), new Map())).toBeNull();
   });
 
   it('goes once the corridor is sealed off from the bee', () => {
     const b = boardFromAscii(['..A.', '####', '.*..']);
-    const route = findRoute(b, queue(0), beeReach(b), new Set());
+    const route = findRoute(b, queue(0), beeReach(b), new Map());
     expect(route).toEqual({ path: [0, 1], boneCell: 2 });
   });
 
   it('returns null when the entry cell is not open', () => {
     const b = boardFromAscii(['#.A.', '####']);
-    expect(findRoute(b, queue(0), new Set(), new Set())).toBeNull();
+    expect(findRoute(b, queue(0), new Set(), new Map())).toBeNull();
   });
 
   it('returns null when no bone is reachable at all', () => {
     const b = boardFromAscii(['..#A', '..##']);
-    expect(findRoute(b, queue(0), new Set(), new Set())).toBeNull();
+    expect(findRoute(b, queue(0), new Set(), new Map())).toBeNull();
   });
 
   it('takes a right-angle route around an obstacle', () => {
@@ -79,7 +79,7 @@ describe('findRoute', () => {
       '...',
       '###',
     ]);
-    const route = findRoute(b, queue(0), new Set(), new Set());
+    const route = findRoute(b, queue(0), new Set(), new Map());
     // down, right, right, then eat upward from (2,1)
     expect(route?.boneCell).toBe(2);
     expect(route?.path).toEqual([0, 3, 4, 5]);
@@ -87,10 +87,10 @@ describe('findRoute', () => {
 
   it('skips a bone another dog has already claimed', () => {
     const b = boardFromAscii(['A..B', '....']);
-    const near = findRoute(b, queue(4), new Set(), new Set());
+    const near = findRoute(b, queue(4), new Set(), new Map());
     expect(near?.boneCell).toBe(0);
 
-    const far = findRoute(b, queue(4), new Set(), new Set([0]));
+    const far = findRoute(b, queue(4), new Set(), new Map([[0, 1]]));
     expect(far?.boneCell).toBe(3);
     // one of the two equally short routes; BFS scans up before right
     expect(far?.path).toEqual([4, 5, 1, 2]);
@@ -98,7 +98,7 @@ describe('findRoute', () => {
 
   it('eats from the entry cell itself when the bone is already adjacent', () => {
     const b = boardFromAscii(['A...', '....']);
-    const route = findRoute(b, queue(4), new Set(), new Set());
+    const route = findRoute(b, queue(4), new Set(), new Map());
     expect(route).toEqual({ path: [4], boneCell: 0 });
   });
 });
@@ -108,26 +108,26 @@ describe('eating straight off the queue', () => {
 
   it('takes a bone parked on the entry cell without stepping onto the board', () => {
     const b = boardFromAscii(['A...', '....']);
-    expect(findRoute(b, queue(0), new Set(), new Set())).toEqual({ path: [], boneCell: 0 });
+    expect(findRoute(b, queue(0), new Set(), new Map())).toEqual({ path: [], boneCell: 0 });
   });
 
   it('still refuses when the entry cell holds a block with no bone', () => {
     const b = boardFromAscii(['a...', '....']);
-    expect(findRoute(b, queue(0), new Set(), new Set())).toBeNull();
+    expect(findRoute(b, queue(0), new Set(), new Map())).toBeNull();
   });
 
   it('goes even when a bee has poisoned the rest of the board', () => {
     const b = boardFromAscii(['A...', '....', '..*.']);
-    expect(findRoute(b, queue(0), beeReach(b), new Set())).toEqual({ path: [], boneCell: 0 });
+    expect(findRoute(b, queue(0), beeReach(b), new Map())).toEqual({ path: [], boneCell: 0 });
   });
 
   it('does not take a bone another dog has already claimed', () => {
     const b = boardFromAscii(['A...', '....']);
-    expect(findRoute(b, queue(0), new Set(), new Set([0]))).toBeNull();
+    expect(findRoute(b, queue(0), new Set(), new Map([[0, 1]]))).toBeNull();
   });
 
   it('still refuses when a wall sits on the entry cell', () => {
     const b = boardFromAscii(['#...', '....']);
-    expect(findRoute(b, queue(0), new Set(), new Set())).toBeNull();
+    expect(findRoute(b, queue(0), new Set(), new Map())).toBeNull();
   });
 });

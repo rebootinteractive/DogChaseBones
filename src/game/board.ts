@@ -4,7 +4,8 @@ import type { LevelSpec } from './level';
 
 export interface Unit {
   group: string;
-  bone: boolean;
+  /** Bones still riding this unit. It is destroyed when this reaches zero. */
+  bones: number;
   colorKey?: string;
 }
 
@@ -50,7 +51,7 @@ export function createBoard(spec: LevelSpec): BoardState {
   const units = new Map<number, Unit>();
   const authored = new Map<string, Set<number>>();
   for (const u of spec.units) {
-    const unit: Unit = { group: u.group, bone: u.bone };
+    const unit: Unit = { group: u.group, bones: u.bones };
     if (u.colorKey !== undefined) unit.colorKey = u.colorKey;
     units.set(u.cell, unit);
     let set = authored.get(u.group);
@@ -197,7 +198,7 @@ export function islands(spec: { cols: number; rows: number; dead: Set<number> })
 
 export function bonesRemaining(state: BoardState): number {
   let n = 0;
-  for (const u of state.units.values()) if (u.bone) n++;
+  for (const u of state.units.values()) n += u.bones;
   return n;
 }
 

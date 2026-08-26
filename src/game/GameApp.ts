@@ -12,8 +12,9 @@ import type { Camera } from './camera';
 import { slideGroupBy } from './slide';
 import { beeReach } from './pathing';
 import { finishWalker, isWon, resolveMoves } from './resolve';
+import { LabelPool } from '../render/labels';
 import {
-  drawBadge, drawBee, drawBeeReachCell, drawBlockGroup, drawBone,
+  drawBadge, drawBee, drawBeeReachCell, drawBlockGroup, drawBone, drawBonePip,
   drawCell, drawDog, drawRouteCell, drawWall,
 } from '../render/draw';
 
@@ -53,6 +54,7 @@ export class GameApp {
   private overlayG = new Graphics();
   private boardG = new Graphics();
   private dogG = new Graphics();
+  private boneCounts = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
   private hud = new Container();
 
   private spec!: LevelSpec;
@@ -86,7 +88,7 @@ export class GameApp {
     this.parent.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
 
-    this.root.addChild(this.gridG, this.overlayG, this.boardG, this.dogG);
+    this.root.addChild(this.gridG, this.overlayG, this.boardG, this.boneCounts.view, this.dogG);
     this.app.stage.addChild(this.root, this.hud);
 
     this.app.stage.eventMode = 'static';
@@ -280,19 +282,29 @@ export class GameApp {
 
   private drawBoard() {
     this.boardG.clear();
+    this.boneCounts.begin();
     for (const cell of this.state.walls) drawWall(this.boardG, this.cam, cell);
     for (const [group, cells] of this.state.groups) {
       drawBlockGroup(this.boardG, this.cam, cells, this.drag?.group === group ? C.blockHeld : C.block);
     }
     for (const [cell, unit] of this.state.units) {
-      if (!unit.bone) continue;
+      if (unit.bones <= 0) continue;
       const p = cellCenter(this.cam, cell);
       drawBone(this.boardG, p.x, p.y, this.cam.cell);
+      // A unit can carry a stack; it survives until the last bone is eaten.
+      if (unit.bones > 1) {
+        const r = this.cam.cell * 0.21;
+        const px = p.x + this.cam.cell * 0.29;
+        const py = p.y + this.cam.cell * 0.29;
+        drawBonePip(this.boardG, px, py, r);
+        this.boneCounts.add(px, py, String(unit.bones), r / 9);
+      }
     }
     for (const cell of this.state.bees) {
       const p = cellCenter(this.cam, cell);
       drawBee(this.boardG, p.x, p.y, this.cam.cell);
     }
+    this.boneCounts.end();
   }
 
   private drawDogs() {
@@ -474,6 +486,7 @@ export class GameApp {
     this.banner?.remove();
     this.anims = [];
     this.badgeLabels = [];
+    this.boneCounts.destroy();
     // destroys renderer, view canvas, and all stage children/graphics
     this.app.destroy({ removeView: true }, { children: true, texture: true });
   }

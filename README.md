@@ -16,10 +16,15 @@ multi-queue system on the grid edges.
 - **Block groups** are one or more unit blocks that move as a piece. Free drag:
   the group follows your finger cell by cell and stops the moment any unit hits
   a wall, another group, a bee, a dog or the grid edge.
-- **Bones** ride block units, so they move with their group.
+- **Bones** ride block units, so they move with their group. A unit can carry a
+  stack of them: each dog takes one, and the unit is only destroyed when its
+  last bone goes.
 - **Dogs** wait in queues on the grid boundary. Only the leader is live. On drag
   release, any leader with a safe route sets off on its own, walks in, eats a
   bone, and destroys its host unit. The queue then advances.
+- **A committed bone is pinned.** Once a dog sets off for a bone, that block
+  group cannot be moved until it has eaten — the bone can't be pulled out from
+  under it.
 - **Eating off the queue.** If a bone is parked on the leader's own entry cell,
   it is already under the dog's nose: the dog eats it from where it stands
   without walking a route at all. Nothing is reserved, so other groups stay free
@@ -61,7 +66,8 @@ Menu → **Edit** on a level, or **+ Create New Level**.
 
 - **Block**: pick a group chip, then tap cells to add them to that group. Tap
   **+ group** for a new one — two groups can sit flush and still slide apart.
-- **Bone**: tap a block unit. Bones cannot exist without a block under them.
+- **Bone**: tap a block unit to add a bone; shift-tap takes one off. Up to 9 per
+  unit, shown as a count. Bones cannot exist without a block under them.
 - **Wall / Bee / Off**: tap cells. *Off* is how you cut a level into islands.
 - **Queue**: tap a cell whose outward side is off-grid or switched off. Tap it
   again to turn it; set the dog count in the settings row.

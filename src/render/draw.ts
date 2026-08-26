@@ -135,3 +135,8 @@ export function drawVacatedCell(g: Graphics, cam: Camera, cell: number) {
   g.roundRect(x + i, y + i, cam.cell - i * 2, cam.cell - i * 2, L.blockRadius)
     .stroke({ width: 1.5, color: C.ghost, alpha: 0.5 });
 }
+
+/** Backing disc for a stacked-bone count, so the number reads over the bone. */
+export function drawBonePip(g: Graphics, cx: number, cy: number, r: number) {
+  g.circle(cx, cy, r).fill({ color: C.badgeFill }).stroke({ width: 1.2, color: C.bone, alpha: 0.9 });
+}

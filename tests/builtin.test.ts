@@ -58,7 +58,7 @@ describe('2 - Tight Squeeze', () => {
     // The two loose bones go first; the walled-in one is unreachable.
     expect(playOut(state)).toBe(2);
     expect(isWon(state)).toBe(false);
-    expect(state.units.get(cell(2, 4))!.bone).toBe(true);
+    expect(state.units.get(cell(2, 4))!.bones).toBe(1);
 
     expect(slideGroupBy(state, 'b', 1, 0)).toEqual({ dc: 1, dr: 0 });
     expect(playOut(state)).toBe(1);

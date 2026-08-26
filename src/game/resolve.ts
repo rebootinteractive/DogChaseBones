@@ -2,15 +2,34 @@ import { removeUnit } from './board';
 import type { BoardState, Walker } from './board';
 import { beeReach, findRoute } from './pathing';
 
+/**
+ * Rebuild the reserved set from the walkers. A walker holds its whole route
+ * *and* the cell of the bone it is coming for, so neither can be moved out from
+ * under it. Derived rather than patched, so it can never drift.
+ */
+function syncReserved(state: BoardState) {
+  state.reserved.clear();
+  for (const w of state.walkers) {
+    for (const cell of w.path) state.reserved.add(cell);
+    state.reserved.add(w.boneCell);
+  }
+}
+
 export interface Commitment {
   queueId: string;
   path: number[];
   boneCell: number;
 }
 
-/** Bones already spoken for, so two dogs never race for the same one. */
-function claimedBones(state: BoardState): Set<number> {
-  return new Set(state.walkers.map((w) => w.boneCell));
+/**
+ * Bones already spoken for, counted per cell. A unit can carry a stack, so two
+ * dogs may legitimately be walking towards the same cell -- but never towards
+ * more bones than are actually on it.
+ */
+function claimedBones(state: BoardState): Map<number, number> {
+  const claims = new Map<number, number>();
+  for (const w of state.walkers) claims.set(w.boneCell, (claims.get(w.boneCell) ?? 0) + 1);
+  return claims;
 }
 
 /**
@@ -39,9 +58,9 @@ export function resolveMoves(state: BoardState): Commitment[] {
 
       q.remaining--;
       busy.add(q.id);
-      claimed.add(route.boneCell);
-      for (const cell of route.path) state.reserved.add(cell);
+      claimed.set(route.boneCell, (claimed.get(route.boneCell) ?? 0) + 1);
       state.walkers.push({ queueId: q.id, path: route.path, step: -1, boneCell: route.boneCell });
+      syncReserved(state);
       committed.push({ queueId: q.id, path: route.path, boneCell: route.boneCell });
       progressed = true;
     }
@@ -54,17 +73,31 @@ export interface EatResult {
   /** Groups that exist where the eaten unit's group used to be. More than one means it split. */
   groups: string[];
   boneCell: number;
+  /** Bones still on that unit after this bite. */
+  bonesLeft: number;
+  /** True when that was the last bone and the unit went with it. */
+  destroyed: boolean;
 }
 
 /**
- * The dog has arrived: destroy the bone and its host unit, free the route, and
- * split the host's group if that unit was the only thing holding it together.
+ * The dog has arrived: take one bone off the unit and free the route. The unit
+ * only goes when its last bone does -- and if it was the one thing holding its
+ * group together, the group splits then.
  */
 export function finishWalker(state: BoardState, walker: Walker): EatResult {
-  for (const cell of walker.path) state.reserved.delete(cell);
   state.walkers = state.walkers.filter((w) => w !== walker);
+  syncReserved(state);
+
+  const unit = state.units.get(walker.boneCell);
+  if (!unit) return { groups: [], boneCell: walker.boneCell, bonesLeft: 0, destroyed: false };
+
+  unit.bones = Math.max(0, unit.bones - 1);
+  if (unit.bones > 0) {
+    return { groups: [unit.group], boneCell: walker.boneCell, bonesLeft: unit.bones, destroyed: false };
+  }
+
   const groups = removeUnit(state, walker.boneCell);
-  return { groups, boneCell: walker.boneCell };
+  return { groups, boneCell: walker.boneCell, bonesLeft: 0, destroyed: true };
 }
 
 export function isWon(state: BoardState): boolean {

@@ -42,6 +42,9 @@ function passableNeighbours(state: BoardState, cell: number): number[] {
   return out;
 }
 
+/** Bones already spoken for, per cell -- a stacked unit can be claimed twice. */
+export type BoneClaims = ReadonlyMap<number, number>;
+
 export interface Route {
   /** Cells from the queue's entry cell to the cell the dog eats from.
    *  Empty when the bone is on the entry cell and the dog eats from the queue. */
@@ -59,7 +62,7 @@ export function findRoute(
   state: BoardState,
   queue: RuntimeQueue,
   bees: Set<number>,
-  claimedBones: Set<number>,
+  claimedBones: BoneClaims,
 ): Route | null {
   const entry = queue.cell;
 
@@ -67,7 +70,7 @@ export function findRoute(
   // from where it stands, without stepping onto the board -- an empty route.
   // No cells are walked, so there is nothing for a bee to poison.
   const atEntry = state.units.get(entry);
-  if (atEntry?.bone && !claimedBones.has(entry)) return { path: [], boneCell: entry };
+  if (atEntry && free(atEntry, entry, claimedBones) > 0) return { path: [], boneCell: entry };
 
   if (!isPassable(state, entry) || bees.has(entry)) return null;
 
@@ -93,8 +96,16 @@ export function findRoute(
   return null;
 }
 
-/** First unclaimed bone orthogonally touching `cell`, scanned in DIRS order. */
-function adjacentBone(state: BoardState, cell: number, claimed: Set<number>): number | null {
+/**
+ * How many of this unit's bones nobody has set off for yet. A unit can carry a
+ * stack, so several dogs may be walking towards the same cell at once.
+ */
+function free(unit: { bones: number }, cell: number, claimed: BoneClaims): number {
+  return unit.bones - (claimed.get(cell) ?? 0);
+}
+
+/** First unspoken-for bone orthogonally touching `cell`, scanned in DIRS order. */
+function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims): number | null {
   const c = colOf(state.cols, cell);
   const r = rowOf(state.cols, cell);
   for (const d of DIRS) {
@@ -104,7 +115,7 @@ function adjacentBone(state: BoardState, cell: number, claimed: Set<number>): nu
     if (!inBounds(state.cols, state.rows, nc, nr)) continue;
     const n = idx(state.cols, nc, nr);
     const unit = state.units.get(n);
-    if (unit?.bone && !claimed.has(n)) return n;
+    if (unit && free(unit, n, claimed) > 0) return n;
   }
   return null;
 }

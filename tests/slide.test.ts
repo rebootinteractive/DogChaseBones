@@ -53,7 +53,7 @@ describe('stepGroup', () => {
     const b = boardFromAscii(['A...', '....']);
     stepGroup(b, 'a', 0, 1);
     expect(toAscii(b)).toEqual(['....', 'A...']);
-    expect(b.units.get(4)!.bone).toBe(true);
+    expect(b.units.get(4)!.bones).toBe(1);
   });
 
   it('changes nothing when blocked', () => {

@@ -121,8 +121,8 @@ describe('a group is a connected run within an authored id', () => {
     const b = boardFromAscii(['aA.A', '....']);
     const left = b.units.get(0)!.group;
     stepGroup(b, left, 0, 1);
-    expect(b.units.get(4)!.bone).toBe(false);
-    expect(b.units.get(5)!.bone).toBe(true);
-    expect(b.units.get(3)!.bone).toBe(true);   // the far lump did not move
+    expect(b.units.get(4)!.bones).toBe(0);
+    expect(b.units.get(5)!.bones).toBe(1);
+    expect(b.units.get(3)!.bones).toBe(1);   // the far lump did not move
   });
 });

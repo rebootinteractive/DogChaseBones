@@ -1,16 +1,18 @@
 import { describe, it, expect } from 'vitest';
+import { bonesRemaining } from '../src/game/board';
 import { finishWalker, isWon, resolveMoves } from '../src/game/resolve';
-import { canStepGroup } from '../src/game/slide';
+import { canStepGroup, slideGroupBy } from '../src/game/slide';
 import { boardFromAscii, toAscii } from './helpers';
 
 describe('resolveMoves', () => {
-  it('sends a leader that has a safe route and reserves the whole path', () => {
+  it('sends a leader that has a safe route and reserves the path plus its bone', () => {
     const b = boardFromAscii(['..A.', '####'], [{ c: 0, r: 0, dir: 'up', count: 2 }]);
     const out = resolveMoves(b);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ queueId: 'q0', boneCell: 2 });
     expect(b.queues[0].remaining).toBe(1);
-    expect([...b.reserved].sort((x, y) => x - y)).toEqual([0, 1]);
+    // route cells 0 and 1, plus cell 2 so the bone cannot be slid away
+    expect([...b.reserved].sort((x, y) => x - y)).toEqual([0, 1, 2]);
   });
 
   it('locks the route against block slides', () => {
@@ -47,7 +49,7 @@ describe('resolveMoves', () => {
     const b = boardFromAscii(['A.', '..', 'B.'], [{ c: 1, r: 1, dir: 'right', count: 2 }]);
     const out = resolveMoves(b);
     expect(out).toHaveLength(1);
-    expect(b.reserved.size).toBe(out[0].path.length);
+    expect(b.reserved.size).toBe(out[0].path.length + 1);   // + the bone cell
   });
 });
 
@@ -87,12 +89,12 @@ describe('isWon', () => {
 });
 
 describe('eating off the queue', () => {
-  it('sends the leader with an empty route and reserves nothing', () => {
+  it('sends the leader with an empty route, holding only the bone it is eating', () => {
     const b = boardFromAscii(['A...', '....'], [{ c: 0, r: 0, dir: 'left', count: 1 }]);
     const out = resolveMoves(b);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ path: [], boneCell: 0 });
-    expect(b.reserved.size).toBe(0);
+    expect([...b.reserved]).toEqual([0]);   // no route walked, but the bone is pinned
     expect(b.queues[0].remaining).toBe(0);
   });
 
@@ -129,5 +131,121 @@ describe('eating off the queue', () => {
     const b = boardFromAscii(['A...', '....'], [{ c: 0, r: 0, dir: 'left', count: 3 }]);
     expect(resolveMoves(b)).toHaveLength(1);
     expect(resolveMoves(b)).toHaveLength(0);
+  });
+});
+
+describe('a unit carrying several bones', () => {
+  const stacked = (bones: number, dogs: number) => {
+    const b = boardFromAscii(['A...', '....'], [{ c: 0, r: 1, dir: 'left', count: dogs }]);
+    b.units.get(0)!.bones = bones;
+    return b;
+  };
+
+  it('survives a bite while bones are left, and keeps its group', () => {
+    const b = stacked(3, 3);
+    resolveMoves(b);
+    const first = finishWalker(b, b.walkers[0]);
+    expect(first).toMatchObject({ bonesLeft: 2, destroyed: false });
+    expect(b.units.has(0)).toBe(true);
+    expect(b.units.get(0)!.bones).toBe(2);
+  });
+
+  it('is destroyed only when the last bone goes', () => {
+    const b = stacked(2, 2);
+    resolveMoves(b);
+    finishWalker(b, b.walkers[0]);
+    expect(b.units.has(0)).toBe(true);
+
+    resolveMoves(b);
+    const last = finishWalker(b, b.walkers[0]);
+    expect(last).toMatchObject({ bonesLeft: 0, destroyed: true });
+    expect(b.units.has(0)).toBe(false);
+    expect(isWon(b)).toBe(true);
+  });
+
+  it('only splits its group on the last bone', () => {
+    const b = boardFromAscii(['aAa.', '....', '####'], [{ c: 3, r: 0, dir: 'up', count: 2 }]);
+    b.units.get(1)!.bones = 2;
+
+    resolveMoves(b);
+    expect(finishWalker(b, b.walkers[0]).groups).toEqual(['a']);
+    expect(b.groups.get('a')!.size).toBe(3);
+
+    resolveMoves(b);
+    expect(finishWalker(b, b.walkers[0]).groups).toHaveLength(2);
+  });
+
+  it('lets two queues claim two bones off the same unit at once', () => {
+    const b = boardFromAscii(['.A..', '....', '####'], [
+      { c: 0, r: 0, dir: 'up', count: 1 },
+      { c: 3, r: 0, dir: 'up', count: 1 },
+    ]);
+    b.units.get(1)!.bones = 2;
+    const out = resolveMoves(b);
+    expect(out).toHaveLength(2);
+    expect(out.every((c) => c.boneCell === 1)).toBe(true);
+  });
+
+  it('never sends more dogs than the stack has bones', () => {
+    const b = boardFromAscii(['.A..', '....', '####'], [
+      { c: 0, r: 0, dir: 'up', count: 1 },
+      { c: 3, r: 0, dir: 'up', count: 1 },
+    ]);
+    expect(b.units.get(1)!.bones).toBe(1);
+    expect(resolveMoves(b)).toHaveLength(1);
+  });
+
+  it('counts every bone in the stack as remaining', () => {
+    const b = stacked(4, 1);
+    expect(bonesRemaining(b)).toBe(4);
+  });
+});
+
+
+describe('the bone a dog has committed to', () => {
+  it('cannot be slid out from under it', () => {
+    const b = boardFromAscii(['....A.', '......', '######'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
+    resolveMoves(b);
+    expect(b.walkers[0].boneCell).toBe(4);
+
+    expect(slideGroupBy(b, 'a', 0, 1)).toEqual({ dc: 0, dr: 0 });
+    expect(canStepGroup(b, 'a', 0, 1)).toBe(false);
+
+    const result = finishWalker(b, b.walkers[0]);
+    expect(result.destroyed).toBe(true);
+    expect(bonesRemaining(b)).toBe(0);
+    expect(isWon(b)).toBe(true);
+  });
+
+  it('is released again once the dog has eaten', () => {
+    const b = boardFromAscii(['.A..b.', '......', '######'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
+    resolveMoves(b);
+    expect(canStepGroup(b, 'a', 0, 1)).toBe(false);
+    finishWalker(b, b.walkers[0]);
+    expect(b.reserved.size).toBe(0);
+    expect(canStepGroup(b, 'b', 0, 1)).toBe(true);
+  });
+
+  it('leaves every other group free to move meanwhile', () => {
+    const b = boardFromAscii(['.A..b.', '......', '######'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
+    resolveMoves(b);
+    expect(canStepGroup(b, 'b', 0, 1)).toBe(true);
+  });
+
+  it('stays pinned while a second dog is still coming for the same stack', () => {
+    const b = boardFromAscii(['.A..', '....', '####'], [
+      { c: 0, r: 0, dir: 'up', count: 1 },
+      { c: 3, r: 0, dir: 'up', count: 1 },
+    ]);
+    b.units.get(1)!.bones = 2;
+    resolveMoves(b);
+    expect(b.walkers).toHaveLength(2);
+
+    finishWalker(b, b.walkers[0]);
+    expect(b.reserved.has(1)).toBe(true);      // the other dog still wants it
+    expect(canStepGroup(b, 'a', 0, 1)).toBe(false);
+
+    finishWalker(b, b.walkers[0]);
+    expect(b.reserved.size).toBe(0);
   });
 });

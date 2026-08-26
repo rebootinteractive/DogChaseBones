@@ -42,7 +42,7 @@ export function validateLevel(spec: LevelSpec): string[] {
   if (parts.length > 1) {
     parts.forEach((cells, n) => {
       const islandDogs = spec.queues.filter((q) => cells.has(q.cell)).reduce((a, q) => a + q.count, 0);
-      const islandBones = spec.units.filter((u) => u.bone && cells.has(u.cell)).length;
+      const islandBones = spec.units.reduce((n, u) => n + (cells.has(u.cell) ? u.bones : 0), 0);
       if (islandDogs === 0) return;
       if (islandBones === 0) out.push(`Island ${n + 1}: ${islandDogs} dogs and no bones.`);
       else if (islandDogs > islandBones) out.push(`Island ${n + 1}: ${islandDogs} dogs but only ${islandBones} bones.`);
