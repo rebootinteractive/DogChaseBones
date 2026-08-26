@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { boundaryDirs, dogsRemaining, islands, removeUnit } from '../src/game/board';
+import { stepGroup } from '../src/game/slide';
 import { boardFromAscii, specFromAscii, toAscii } from './helpers';
 
 describe('removeUnit', () => {
@@ -75,5 +76,53 @@ describe('dogsRemaining', () => {
     b.queues[0].remaining--;
     b.walkers.push({ queueId: 'q0', path: [3], step: 0, boneCell: 0 });
     expect(dogsRemaining(b)).toBe(3);
+  });
+});
+
+describe('a group is a connected run within an authored id', () => {
+  it('splits one painted colour into separate groups where it is not touching', () => {
+    const b = boardFromAscii(['aa.a', '....']);
+    expect(b.groups.size).toBe(2);
+    expect(b.groups.has('a')).toBe(false);
+    expect(b.units.get(0)!.group).toBe(b.units.get(1)!.group);
+    expect(b.units.get(3)!.group).not.toBe(b.units.get(0)!.group);
+  });
+
+  it('keeps the authored id when the colour is already one piece', () => {
+    const b = boardFromAscii(['aa..', '....']);
+    expect([...b.groups.keys()]).toEqual(['a']);
+  });
+
+  it('treats a colour touching only at a corner as two groups', () => {
+    const b = boardFromAscii(['a...', '.a..']);
+    expect(b.groups.size).toBe(2);
+  });
+
+  it('slides the two lumps independently', () => {
+    const b = boardFromAscii(['aa.a', '....']);
+    const left = b.units.get(0)!.group;
+    stepGroup(b, left, 0, 1);
+    expect(toAscii(b)).toEqual(['...a', 'aa..']);
+  });
+
+  it('keeps two different colours apart even when they touch', () => {
+    const b = boardFromAscii(['aab.', '....']);
+    expect(b.groups.size).toBe(2);
+    expect(b.units.get(1)!.group).not.toBe(b.units.get(2)!.group);
+  });
+
+  it('makes them one group once the gap is painted in', () => {
+    const joined = boardFromAscii(['aaaa', '....']);
+    expect(joined.groups.size).toBe(1);
+    expect([...joined.groups.values()][0].size).toBe(4);
+  });
+
+  it('carries bones with whichever lump owns them', () => {
+    const b = boardFromAscii(['aA.A', '....']);
+    const left = b.units.get(0)!.group;
+    stepGroup(b, left, 0, 1);
+    expect(b.units.get(4)!.bone).toBe(false);
+    expect(b.units.get(5)!.bone).toBe(true);
+    expect(b.units.get(3)!.bone).toBe(true);   // the far lump did not move
   });
 });

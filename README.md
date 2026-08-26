@@ -9,6 +9,10 @@ multi-queue system on the grid edges.
 
 ## Rules
 
+- **A group is a connected run of same-coloured blocks.** Two lumps painted the
+  same colour but not touching are two separate groups and slide independently;
+  make them touch and they become one. Two *different* colours that touch stay
+  separate — that is what the colour is for.
 - **Block groups** are one or more unit blocks that move as a piece. Free drag:
   the group follows your finger cell by cell and stops the moment any unit hits
   a wall, another group, a bee, a dog or the grid edge.

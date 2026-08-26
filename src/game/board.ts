@@ -40,17 +40,35 @@ export interface BoardState {
   reserved: Set<number>;
 }
 
+/**
+ * A group is a *connected component within an authored id*, not the id itself.
+ * Two lumps painted the same colour but not touching are two separate groups
+ * and slide independently; make them touch in the editor and they become one.
+ * Two different ids that touch stay separate, which is what the id is for.
+ */
 export function createBoard(spec: LevelSpec): BoardState {
   const units = new Map<number, Unit>();
-  const groups = new Map<string, Set<number>>();
+  const authored = new Map<string, Set<number>>();
   for (const u of spec.units) {
     const unit: Unit = { group: u.group, bone: u.bone };
     if (u.colorKey !== undefined) unit.colorKey = u.colorKey;
     units.set(u.cell, unit);
-    let set = groups.get(u.group);
-    if (!set) { set = new Set(); groups.set(u.group, set); }
+    let set = authored.get(u.group);
+    if (!set) { set = new Set(); authored.set(u.group, set); }
     set.add(u.cell);
   }
+
+  const groups = new Map<string, Set<number>>();
+  for (const [id, cells] of authored) {
+    const parts = connectedComponents(spec.cols, spec.rows, cells);
+    parts.forEach((part, n) => {
+      // Keep the authored id when it is already one piece, so level ids stay readable.
+      const gid = parts.length === 1 ? id : `${id}#${n}`;
+      groups.set(gid, part);
+      for (const cell of part) units.get(cell)!.group = gid;
+    });
+  }
+
   return {
     cols: spec.cols,
     rows: spec.rows,

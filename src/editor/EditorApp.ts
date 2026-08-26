@@ -10,8 +10,8 @@ import { boundaryDirs } from '../game/board';
 import { validateLevel } from '../game/validate';
 import { cellAt, cellCenter, colRowCenter, computeEditorCamera, toCellDelta } from '../game/camera';
 import type { Camera } from '../game/camera';
-import { cellsOfGroup, evaluatePlacement } from '../game/place';
-import type { Placement } from '../game/place';
+import { componentAt, evaluatePlacement } from '../game/place';
+import type { Placement, PlacementBoard } from '../game/place';
 import { groupTint } from '../render/color';
 import {
   drawBee, drawBlockGroup, drawBone, drawCell, drawDog,
@@ -249,13 +249,15 @@ export class EditorApp {
     if (!group) { this.flash('Nothing to move here — grab a block.'); return; }
 
     const p = this.app.stage.toLocal(e.global);
-    const cells = cellsOfGroup(this.units, group);
+    // Only the connected lump under the finger moves -- a separate lump that
+    // shares this colour is a different group and stays put.
+    const cells = componentAt(this.placementBoard(), cell);
     this.moveDrag = {
       group, cells,
       bones: cells.filter((c) => this.bones.has(c)),
       originX: p.x, originY: p.y,
       dc: 0, dr: 0,
-      placement: this.placementFor(cells, group, 0, 0),
+      placement: this.placementFor(cells, 0, 0),
     };
     this.redraw();
   }
@@ -268,7 +270,7 @@ export class EditorApp {
     if (dc === drag.dc && dr === drag.dr) return;
     drag.dc = dc;
     drag.dr = dr;
-    drag.placement = this.placementFor(drag.cells, drag.group, dc, dr);
+    drag.placement = this.placementFor(drag.cells, dc, dr);
     this.redraw();
   }
 
@@ -293,9 +295,12 @@ export class EditorApp {
     this.refreshChrome();
   }
 
-  private placementFor(cells: number[], group: string, dc: number, dr: number): Placement {
-    const board = { cols: this.cols, rows: this.rows, dead: this.dead, walls: this.walls, bees: this.bees, units: this.units };
-    return evaluatePlacement(board, cells, group, dc, dr);
+  private placementBoard(): PlacementBoard {
+    return { cols: this.cols, rows: this.rows, dead: this.dead, walls: this.walls, bees: this.bees, units: this.units };
+  }
+
+  private placementFor(cells: number[], dc: number, dr: number): Placement {
+    return evaluatePlacement(this.placementBoard(), cells, dc, dr);
   }
 
   private applyBlock(cell: number) {

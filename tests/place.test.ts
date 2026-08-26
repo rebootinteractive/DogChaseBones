@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cellsOfGroup, evaluatePlacement } from '../src/game/place';
+import { componentAt, evaluatePlacement } from '../src/game/place';
 import type { PlacementBoard } from '../src/game/place';
 
 /** Same ASCII convention as the other suites, flattened to an editor board. */
@@ -16,9 +16,11 @@ function board(rows: string[]): PlacementBoard {
   return b;
 }
 
+/** Grab the lump containing the first cell of `group` and shift it. */
 const move = (rows: string[], group: string, dc: number, dr: number) => {
   const b = board(rows);
-  return evaluatePlacement(b, cellsOfGroup(b.units, group), group, dc, dr);
+  const start = [...b.units].find(([, g]) => g === group)?.[0] ?? -1;
+  return evaluatePlacement(b, componentAt(b, start), dc, dr);
 };
 
 describe('evaluatePlacement', () => {
@@ -71,11 +73,40 @@ describe('evaluatePlacement', () => {
   });
 });
 
-describe('cellsOfGroup', () => {
-  it('returns only that group, in a stable order', () => {
-    const b = board(['ab.a', '....']);
-    expect(cellsOfGroup(b.units, 'a')).toEqual([0, 3]);
-    expect(cellsOfGroup(b.units, 'b')).toEqual([1]);
-    expect(cellsOfGroup(b.units, 'z')).toEqual([]);
+describe('componentAt', () => {
+  it('returns the touching run, not everything sharing the colour', () => {
+    const b = board(['aa.a', '....']);
+    expect(componentAt(b, 0)).toEqual([0, 1]);
+    expect(componentAt(b, 3)).toEqual([3]);
+  });
+
+  it('follows the lump around corners', () => {
+    const b = board(['aa..', '.a..', '.aa.']);
+    expect(componentAt(b, 0)).toEqual([0, 1, 5, 9, 10]);
+  });
+
+  it('stops at a different colour even when they touch', () => {
+    const b = board(['aab.', '....']);
+    expect(componentAt(b, 0)).toEqual([0, 1]);
+    expect(componentAt(b, 2)).toEqual([2]);
+  });
+
+  it('is empty where there is no block', () => {
+    expect(componentAt(board(['a...', '....']), 2)).toEqual([]);
+    expect(componentAt(board(['a...', '....']), -1)).toEqual([]);
+  });
+});
+
+describe('two lumps sharing one colour', () => {
+  it('will not let one lump be dropped onto the other', () => {
+    const p = move(['aa.a', '....'], 'a', 2, 0);
+    expect(p.ok).toBe(false);
+    expect(p.blocked).toEqual([3]);
+  });
+
+  it('lets a lump move somewhere the other one is not', () => {
+    const p = move(['aa.a', '....'], 'a', 0, 1);
+    expect(p.ok).toBe(true);
+    expect(p.targets).toEqual([4, 5]);
   });
 });
