@@ -60,16 +60,30 @@ export function drawBlockGroup(g: Graphics, cam: Camera, cells: Set<number>, col
   }
 }
 
-export function drawBone(g: Graphics, cx: number, cy: number, size: number) {
+export function drawBone(g: Graphics, cx: number, cy: number, size: number, locked = false) {
   const len = size * L.boneScale;
   const th = len * 0.3;
   const knob = th * 0.62;
-  g.roundRect(cx - len / 2, cy - th / 2, len, th, th / 2).fill({ color: C.bone });
+  const color = locked ? C.boneLocked : C.bone;
+  g.roundRect(cx - len / 2, cy - th / 2, len, th, th / 2).fill({ color });
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      g.circle(cx + (sx * len) / 2, cy + sy * knob * 0.72, knob).fill({ color: C.bone });
+      g.circle(cx + (sx * len) / 2, cy + sy * knob * 0.72, knob).fill({ color });
     }
   }
+}
+
+/**
+ * A bone's activation tier: a *filled square*, deliberately unlike the round,
+ * dark, bone-outlined count pip on the opposite corner. Two dark circles with a
+ * white digit in each were indistinguishable at cell size, so these differ in
+ * shape, fill and text colour at once rather than in any one of them.
+ */
+export function drawTierBadge(g: Graphics, cx: number, cy: number, r: number, locked: boolean) {
+  const s = r * 1.85;
+  g.roundRect(cx - s / 2, cy - s / 2, s, s, r * 0.42)
+    .fill({ color: locked ? C.tierBadgeLocked : C.tierBadge })
+    .stroke({ width: 1.2, color: locked ? C.boneLocked : 0xffffff, alpha: 0.85 });
 }
 
 export function drawBee(g: Graphics, cx: number, cy: number, size: number) {

@@ -12,6 +12,10 @@ export interface PlacementBoard {
   dead: Set<number>;
   walls: Set<number>;
   bees: Set<number>;
+  /** Cells holding a bone with no block under it -- these block a drop. */
+  bones: Set<number>;
+  /** Cells holding a dog standing on the board. */
+  dogs: Set<number>;
   /** cell -> group id */
   units: Map<number, string>;
 }
@@ -61,6 +65,8 @@ export function evaluatePlacement(
       board.dead.has(target) ||
       board.walls.has(target) ||
       board.bees.has(target) ||
+      board.bones.has(target) ||
+      board.dogs.has(target) ||
       (board.units.has(target) && !own.has(target));
 
     if (taken) blocked.push(target);

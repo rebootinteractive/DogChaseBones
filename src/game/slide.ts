@@ -27,6 +27,8 @@ export function canStepGroup(state: BoardState, group: string, dc: number, dr: n
     if (state.walls.has(target)) return false;
     if (state.bees.has(target)) return false;
     if (state.units.has(target)) return false;     // another group
+    if (state.bones.has(target)) return false;     // a bone standing on the grid
+    if (state.gridDogs.has(target)) return false;  // a dog standing on the grid
     if (state.reserved.has(target)) return false;  // a dog's locked route
   }
   return true;
@@ -37,13 +39,24 @@ export function stepGroup(state: BoardState, group: string, dc: number, dr: numb
   if (!canStepGroup(state, group, dc, dr)) return false;
 
   const cells = state.groups.get(group)!;
-  const units = [...cells].map((cell) => ({ cell, unit: state.units.get(cell)! }));
-  for (const { cell } of units) state.units.delete(cell);
+  const moving = [...cells].map((cell) => ({
+    cell,
+    unit: state.units.get(cell)!,
+    bones: state.bones.get(cell),
+  }));
+
+  // Clear the whole footprint first: a group may slide over its own cells, so
+  // a cell-by-cell move would overwrite an entry it still needs.
+  for (const { cell } of moving) {
+    state.units.delete(cell);
+    state.bones.delete(cell);
+  }
 
   const next = new Set<number>();
-  for (const { cell, unit } of units) {
+  for (const { cell, unit, bones } of moving) {
     const target = idx(state.cols, colOf(state.cols, cell) + dc, rowOf(state.cols, cell) + dr);
     state.units.set(target, unit);
+    if (bones) state.bones.set(target, bones);
     next.add(target);
   }
   state.groups.set(group, next);

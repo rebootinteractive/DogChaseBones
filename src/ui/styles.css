@@ -149,6 +149,14 @@ body.editor-mode #phone {
 .group-chip.active { border-color: #fff; }
 .group-chip.new { background: rgba(255,255,255,.1); color: #c9cfe0; }
 
+/* Tier chips carry no colour of their own -- unlike group chips, which are
+   tinted inline -- so selected and unselected have to differ by fill, not just
+   by a border on an invisible box. */
+.tier-chip { background: rgba(255,255,255,.08); color: #c9cfe0; }
+.tier-chip:hover { background: rgba(255,255,255,.16); }
+.tier-chip.active { background: #f2efe6; color: #1c1f2a; border-color: #fff; }
+.tier-chip.active .key { opacity: .75; }
+
 .queue-panel {
   display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
   padding: 8px 10px; border-radius: 10px;

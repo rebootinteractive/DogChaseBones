@@ -5,7 +5,7 @@ import { STAGE_H, STAGE_W } from '../shared/stage';
 import { SETTINGS } from './settings';
 import { parseLevel } from './level';
 import type { LevelSpec } from './level';
-import { createBoard, dogsRemaining, queueSlot } from './board';
+import { activeOrder, createBoard, dogsRemaining, queueSlot, queuesOf } from './board';
 import type { BoardState, RuntimeQueue, Walker } from './board';
 import { cellAt, cellCenter, colRowCenter, computeCamera, toCellDelta } from './camera';
 import type { Camera } from './camera';
@@ -14,7 +14,7 @@ import { beeReach } from './pathing';
 import { finishWalker, isWon, resolveMoves } from './resolve';
 import { LabelPool } from '../render/labels';
 import {
-  drawBadge, drawBee, drawBeeReachCell, drawBlockGroup, drawBone, drawBonePip,
+  drawBadge, drawBee, drawBeeReachCell, drawBlockGroup, drawBone, drawBonePip, drawTierBadge,
   drawCell, drawDog, drawRouteCell, drawWall,
 } from '../render/draw';
 
@@ -55,6 +55,7 @@ export class GameApp {
   private boardG = new Graphics();
   private dogG = new Graphics();
   private boneCounts = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
+  private tierLabels = new LabelPool({ fill: C.tierBadgeText, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
   private hud = new Container();
 
   private spec!: LevelSpec;
@@ -88,7 +89,7 @@ export class GameApp {
     this.parent.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
 
-    this.root.addChild(this.gridG, this.overlayG, this.boardG, this.boneCounts.view, this.dogG);
+    this.root.addChild(this.gridG, this.overlayG, this.boardG, this.boneCounts.view, this.tierLabels.view, this.dogG);
     this.app.stage.addChild(this.root, this.hud);
 
     this.app.stage.eventMode = 'static';
@@ -137,7 +138,7 @@ export class GameApp {
   private rebuildBadges() {
     for (const label of this.badgeLabels) { this.hud.removeChild(label); label.destroy(); }
     this.badgeLabels = [];
-    for (const _q of this.state.queues) {
+    for (const _q of queuesOf(this.state)) {
       const label = new Text({
         text: '',
         style: new TextStyle({ fill: C.badgeText, fontSize: 11, fontFamily: 'system-ui, sans-serif' }),
@@ -188,7 +189,7 @@ export class GameApp {
   /** Every queue leader with a safe route sets off. Called on release and after each bone. */
   private sendDogs() {
     for (const c of resolveMoves(this.state)) {
-      const walker = this.state.walkers.find((w) => w.queueId === c.queueId && w.boneCell === c.boneCell);
+      const walker = this.state.walkers.find((w) => w.sourceId === c.sourceId && w.boneCell === c.boneCell);
       if (walker) this.anims.push({ walker, progress: -1, enterDelay: T.dogEnterDelay, eating: 0, arrived: false });
     }
   }
@@ -283,21 +284,35 @@ export class GameApp {
   private drawBoard() {
     this.boardG.clear();
     this.boneCounts.begin();
+    this.tierLabels.begin();
     for (const cell of this.state.walls) drawWall(this.boardG, this.cam, cell);
     for (const [group, cells] of this.state.groups) {
       drawBlockGroup(this.boardG, this.cam, cells, this.drag?.group === group ? C.blockHeld : C.block);
     }
-    for (const [cell, unit] of this.state.units) {
-      if (unit.bones <= 0) continue;
+    // Tier badges appear only when the level actually uses more than one tier,
+    // so a single-tier level looks exactly as it always did.
+    const tiered = new Set([...this.state.bones.values()].map((s) => s.order)).size > 1;
+    const active = activeOrder(this.state);
+    for (const [cell, stack] of this.state.bones) {
       const p = cellCenter(this.cam, cell);
-      drawBone(this.boardG, p.x, p.y, this.cam.cell);
-      // A unit can carry a stack; it survives until the last bone is eaten.
-      if (unit.bones > 1) {
-        const r = this.cam.cell * 0.21;
+      const locked = active !== null && stack.order !== active;
+      // A bone on a bare cell is a grid bone -- the missing block under it is
+      // the only tell it needs. A locked tier is drawn greyed: visible, still
+      // blocking, not yet claimable.
+      drawBone(this.boardG, p.x, p.y, this.cam.cell, locked);
+      const r = this.cam.cell * 0.21;
+      // A cell can carry a stack; it survives until the last bone is eaten.
+      if (stack.count > 1) {
         const px = p.x + this.cam.cell * 0.29;
         const py = p.y + this.cam.cell * 0.29;
         drawBonePip(this.boardG, px, py, r);
-        this.boneCounts.add(px, py, String(unit.bones), r / 9);
+        this.boneCounts.add(px, py, String(stack.count), r / 9);
+      }
+      if (tiered) {
+        const px = p.x - this.cam.cell * 0.29;
+        const py = p.y - this.cam.cell * 0.29;
+        drawTierBadge(this.boardG, px, py, r, locked);
+        this.tierLabels.add(px, py, String(stack.order), r / 9);
       }
     }
     for (const cell of this.state.bees) {
@@ -305,16 +320,23 @@ export class GameApp {
       drawBee(this.boardG, p.x, p.y, this.cam.cell);
     }
     this.boneCounts.end();
+    this.tierLabels.end();
   }
 
   private drawDogs() {
     this.dogG.clear();
     const size = this.cam.cell * L.queueDogScale;
 
-    this.state.queues.forEach((q, i) => {
+    // Dogs standing on the board, waiting for a safe route out of their cell.
+    for (const cell of this.state.gridDogs) {
+      const p = cellCenter(this.cam, cell);
+      drawDog(this.dogG, p.x, p.y, size);
+    }
+
+    queuesOf(this.state).forEach((q, i) => {
       // While this queue's leader is still stepping in from outside, the dogs
       // behind it hold back one slot so they do not draw on top of it.
-      const entering = this.anims.some((a) => a.walker.queueId === q.id && a.progress < 0);
+      const entering = this.anims.some((a) => a.walker.sourceId === q.id && a.progress < 0);
       const first = entering ? 1 : 0;
       const drawn = Math.min(q.remaining, L.queueMaxDrawn);
       for (let n = 0; n < drawn; n++) {
@@ -368,7 +390,9 @@ export class GameApp {
 
   private pathPoint(walker: Walker, i: number): { x: number; y: number } {
     if (i >= 0) return cellCenter(this.cam, walker.path[i]);
-    const q = this.state.queues.find((x) => x.id === walker.queueId)!;
+    // A grid dog has no off-board slot: it starts on the board, at path[0].
+    const q = queuesOf(this.state).find((x) => x.id === walker.sourceId);
+    if (!q) return cellCenter(this.cam, walker.path[0]);
     const slot = queueSlot(this.state, q, 0);
     return colRowCenter(this.cam, slot.c, slot.r);
   }
@@ -407,7 +431,7 @@ export class GameApp {
 
     this.hud.addChild(this.nameText, this.timerText, this.dogsText, icon);
 
-    for (const _q of this.state.queues) {
+    for (const _q of queuesOf(this.state)) {
       const label = new Text({
         text: '',
         style: new TextStyle({ fill: C.badgeText, fontSize: 11, fontFamily: 'system-ui, sans-serif' }),
@@ -487,6 +511,7 @@ export class GameApp {
     this.anims = [];
     this.badgeLabels = [];
     this.boneCounts.destroy();
+    this.tierLabels.destroy();
     // destroys renderer, view canvas, and all stage children/graphics
     this.app.destroy({ removeView: true }, { children: true, texture: true });
   }

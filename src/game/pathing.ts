@@ -1,6 +1,6 @@
 import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
-import { isPassable } from './board';
-import type { BoardState, RuntimeQueue } from './board';
+import { activeOrder, isPassable } from './board';
+import type { BoardState, DogSource } from './board';
 
 /**
  * Every cell a bee can currently get to, flooding outward through open cells.
@@ -60,19 +60,26 @@ export interface Route {
  */
 export function findRoute(
   state: BoardState,
-  queue: RuntimeQueue,
+  source: DogSource,
   bees: Set<number>,
   claimedBones: BoneClaims,
 ): Route | null {
-  const entry = queue.cell;
+  const entry = source.cell;
+  // Computed once: findRoute is a BFS and would otherwise recompute it per cell.
+  const order = activeOrder(state);
+  if (order === null) return null;
 
-  // A bone parked on the entry cell is right under the leader's nose. It eats
-  // from where it stands, without stepping onto the board -- an empty route.
-  // No cells are walked, so there is nothing for a bee to poison.
-  const atEntry = state.units.get(entry);
-  if (atEntry && free(atEntry, entry, claimedBones) > 0) return { path: [], boneCell: entry };
+  // A bone parked on a queue's entry cell is right under the leader's nose. It
+  // eats from where it stands, without stepping onto the board -- an empty
+  // route. No cells are walked, so there is nothing for a bee to poison.
+  if (source.kind === 'queue' && free(state, entry, claimedBones, order) > 0) {
+    return { path: [], boneCell: entry };
+  }
 
-  if (!isPassable(state, entry) || bees.has(entry)) return null;
+  // A grid dog is already standing on the board, so its own cell is the first
+  // step of its route -- occupied by itself, and never `isPassable`.
+  if (source.kind === 'queue' && (!isPassable(state, entry) || bees.has(entry))) return null;
+  if (source.kind === 'grid' && bees.has(entry)) return null;
 
   const prev = new Map<number, number>();
   const seen = new Set<number>([entry]);
@@ -81,7 +88,7 @@ export function findRoute(
   while (frontier.length) {
     const next: number[] = [];
     for (const cur of frontier) {
-      const bone = adjacentBone(state, cur, claimedBones);
+      const bone = adjacentBone(state, cur, claimedBones, order);
       if (bone !== null) return { path: rebuild(prev, entry, cur), boneCell: bone };
 
       for (const n of passableNeighbours(state, cur)) {
@@ -97,15 +104,19 @@ export function findRoute(
 }
 
 /**
- * How many of this unit's bones nobody has set off for yet. A unit can carry a
+ * How many bones on this cell nobody has set off for yet. A cell can carry a
  * stack, so several dogs may be walking towards the same cell at once.
  */
-function free(unit: { bones: number }, cell: number, claimed: BoneClaims): number {
-  return unit.bones - (claimed.get(cell) ?? 0);
+function free(state: BoardState, cell: number, claimed: BoneClaims, order: number | null): number {
+  const stack = state.bones.get(cell);
+  if (!stack) return 0;
+  // Locked tier: visible, blocking, but not claimable yet.
+  if (order === null || stack.order !== order) return 0;
+  return stack.count - (claimed.get(cell) ?? 0);
 }
 
 /** First unspoken-for bone orthogonally touching `cell`, scanned in DIRS order. */
-function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims): number | null {
+function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims, order: number | null): number | null {
   const c = colOf(state.cols, cell);
   const r = rowOf(state.cols, cell);
   for (const d of DIRS) {
@@ -114,8 +125,7 @@ function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims): num
     const nr = r + dr;
     if (!inBounds(state.cols, state.rows, nc, nr)) continue;
     const n = idx(state.cols, nc, nr);
-    const unit = state.units.get(n);
-    if (unit && free(unit, n, claimed) > 0) return n;
+    if (free(state, n, claimed, order) > 0) return n;
   }
   return null;
 }

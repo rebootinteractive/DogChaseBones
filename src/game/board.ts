@@ -1,25 +1,26 @@
 import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
 import type { Dir } from './cells';
-import type { LevelSpec } from './level';
+import type { BoneStack, LevelSpec } from './level';
 
 export interface Unit {
   group: string;
-  /** Bones still riding this unit. It is destroyed when this reaches zero. */
-  bones: number;
   colorKey?: string;
 }
 
-export interface RuntimeQueue {
-  id: string;
-  cell: number;
-  dir: Dir;
-  /** Dogs still waiting, leader included. */
-  remaining: number;
-}
+/**
+ * Where a dog comes from. A queue holds several dogs at an off-board slot and
+ * only its leader is live; a grid dog is a single dog standing on a cell it
+ * occupies. Both walk the same route-finding and eating path.
+ */
+export type DogSource =
+  | { kind: 'queue'; id: string; cell: number; dir: Dir; remaining: number }
+  | { kind: 'grid'; id: string; cell: number };
+
+export type RuntimeQueue = Extract<DogSource, { kind: 'queue' }>;
 
 /** A dog that has committed to a route. Its whole path is reserved until it eats. */
 export interface Walker {
-  queueId: string;
+  sourceId: string;
   /** Cells from the entry cell to the cell the dog eats from. */
   path: number[];
   /** Index into `path`; -1 while the dog is still outside the grid. */
@@ -34,8 +35,17 @@ export interface BoardState {
   walls: Set<number>;
   bees: Set<number>;
   units: Map<number, Unit>;
+  /** Every bone by cell, riding a block or sitting on the grid. */
+  bones: Map<number, BoneStack>;
   groups: Map<string, Set<number>>;
-  queues: RuntimeQueue[];
+  /** Every dog still to walk -- queues, and dogs standing on the board. */
+  sources: DogSource[];
+  /**
+   * Cells held by a grid dog. A derived index over `sources`, rebuilt rather
+   * than patched so it can never drift -- `isBlocked` runs hot and needs a cell
+   * lookup, but `sources` stays the only place a grid dog lives.
+   */
+  gridDogs: Set<number>;
   walkers: Walker[];
   /** Union of every walker's path. Blocks slides, dogs and bee flood alike. */
   reserved: Set<number>;
@@ -51,7 +61,7 @@ export function createBoard(spec: LevelSpec): BoardState {
   const units = new Map<number, Unit>();
   const authored = new Map<string, Set<number>>();
   for (const u of spec.units) {
-    const unit: Unit = { group: u.group, bones: u.bones };
+    const unit: Unit = { group: u.group };
     if (u.colorKey !== undefined) unit.colorKey = u.colorKey;
     units.set(u.cell, unit);
     let set = authored.get(u.group);
@@ -77,8 +87,13 @@ export function createBoard(spec: LevelSpec): BoardState {
     walls: new Set(spec.walls),
     bees: new Set(spec.bees),
     units,
+    bones: new Map([...spec.bones].map(([cell, s]) => [cell, { ...s }])),
     groups,
-    queues: spec.queues.map((q) => ({ id: q.id, cell: q.cell, dir: q.dir, remaining: q.count })),
+    sources: [
+      ...spec.queues.map((q): DogSource => ({ kind: 'queue', id: q.id, cell: q.cell, dir: q.dir, remaining: q.count })),
+      ...spec.gridDogs.map((cell, n): DogSource => ({ kind: 'grid', id: `d${n}`, cell })),
+    ],
+    gridDogs: new Set(spec.gridDogs),
     walkers: [],
     reserved: new Set(),
   };
@@ -91,6 +106,8 @@ export function isBlocked(state: BoardState, cell: number): boolean {
     state.walls.has(cell) ||
     state.bees.has(cell) ||
     state.units.has(cell) ||
+    state.bones.has(cell) ||
+    state.gridDogs.has(cell) ||
     state.reserved.has(cell)
   );
 }
@@ -196,12 +213,71 @@ export function islands(spec: { cols: number; rows: number; dead: Set<number> })
   return connectedComponents(spec.cols, spec.rows, live);
 }
 
+/**
+ * The lowest tier still on the board -- the only tier a dog may eat from.
+ * Null when no bones remain, which is the state where the last walkers are
+ * still finishing and there is nothing left to claim.
+ *
+ * A *claimed* bone still counts as remaining, so a tier unlocks when the last
+ * lower-tier bone is eaten, not when the last one is spoken for.
+ */
+export function activeOrder(state: BoardState): number | null {
+  let lowest: number | null = null;
+  for (const stack of state.bones.values()) {
+    if (stack.count <= 0) continue;
+    if (lowest === null || stack.order < lowest) lowest = stack.order;
+  }
+  return lowest;
+}
+
+/**
+ * Take one bone off a cell. The single place a bone can disappear, which is
+ * what keeps `activeOrder` honest. When the stack empties, the block unit
+ * underneath -- if there is one -- goes with it and its group re-splits.
+ */
+export function takeBone(
+  state: BoardState,
+  cell: number,
+): { bonesLeft: number; destroyed: boolean; groups: string[] } {
+  const stack = state.bones.get(cell);
+  if (!stack) return { bonesLeft: 0, destroyed: false, groups: [] };
+
+  const group = state.units.get(cell)?.group;
+
+  stack.count -= 1;
+  if (stack.count > 0) {
+    return { bonesLeft: stack.count, destroyed: false, groups: group ? [group] : [] };
+  }
+
+  state.bones.delete(cell);
+  if (group === undefined) return { bonesLeft: 0, destroyed: false, groups: [] };
+
+  // The host goes with its last bone -- and if it was the one thing holding its
+  // group together, `removeUnit` reports the groups it fell apart into.
+  return { bonesLeft: 0, destroyed: true, groups: removeUnit(state, cell) };
+}
+
 export function bonesRemaining(state: BoardState): number {
   let n = 0;
-  for (const u of state.units.values()) n += u.bones;
+  for (const stack of state.bones.values()) n += stack.count;
   return n;
 }
 
 export function dogsRemaining(state: BoardState): number {
-  return state.queues.reduce((n, q) => n + q.remaining, 0) + state.walkers.length;
+  const waiting = state.sources.reduce((n, s) => n + (s.kind === 'queue' ? s.remaining : 1), 0);
+  return waiting + state.walkers.length;
+}
+
+/**
+ * Rebuild the grid-dog cell index from `sources`. Derived rather than patched,
+ * so it can never drift -- the same discipline as `syncReserved`.
+ */
+export function syncGridDogs(state: BoardState) {
+  state.gridDogs.clear();
+  for (const s of state.sources) if (s.kind === 'grid') state.gridDogs.add(s.cell);
+}
+
+/** The queue sources, for render code that draws waiting lines of dogs. */
+export function queuesOf(state: BoardState): RuntimeQueue[] {
+  return state.sources.filter((s): s is RuntimeQueue => s.kind === 'queue');
 }

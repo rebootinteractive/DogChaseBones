@@ -35,6 +35,39 @@ cells, islands, bone stacks, multi-unit groups, one and two queues -- produced
 
 **Rule of thumb: audit bee levels. Bee-free levels cannot be locked.**
 
+## What edition 2 changed, and what was re-checked
+
+Grid bones, grid dogs and bone tiers each touch something the argument above
+rests on, so it was re-run rather than assumed.
+
+- **Grid bones and grid dogs are new immovable obstacles.** Both *vanish* when
+  eaten -- a grid bone when its stack empties, a grid dog when it has fed. So
+  they still only ever add free space, and the reversibility argument survives
+  intact. Neither can appear mid-level, and neither can move.
+- **Ordering changes which bones are targetable over time**, which the argument
+  never considered at all. A locked tier is an obstacle a dog can see and not
+  claim, and the set of claimable bones changes as the board empties.
+
+The argument for ordering is that tiers unlock *monotonically*: a tier opens
+when the last lower-tier bone is eaten, eating only ever frees space, and no
+bone can move to a higher tier. So the set of reachable bones only grows. That
+is a plausible argument, and plausible arguments are what this file exists to
+replace.
+
+Re-run with the new content: **1474 randomly generated winnable bee-free
+levels** -- one to three tiers, grid bones, grid dogs, queued dogs, walls, bone
+stacks and multi-unit groups, on 4x3 and 5x4 boards -- produced **zero** soft
+locks. `sl-tiers` in `tests/softlock.test.ts` pins one deterministic tiered
+board and asserts the same thing.
+
+**The rule of thumb stands, with its scope widened: audit bee levels. Bee-free
+levels still cannot be locked, tiers and grid content included.**
+
+Two caveats worth stating plainly. The sweep is evidence, not proof -- it is a
+random search over small boards, and the earlier 1458-level result was the same
+kind of evidence. And it says nothing about *difficulty*: a tiered level can
+easily be tedious, or unwinnable on the clock, without ever being locked.
+
 ## `sl-no-bee` -- the trap that isn't
 
 ```

@@ -31,8 +31,10 @@ export function cloneState(s: BoardState): BoardState {
     walls: new Set(s.walls),
     bees: new Set(s.bees),
     units: new Map([...s.units].map(([c, u]) => [c, { ...u }])),
+    bones: new Map([...s.bones].map(([c, b]) => [c, { ...b }])),
     groups: new Map([...s.groups].map(([g, cells]) => [g, new Set(cells)])),
-    queues: s.queues.map((q) => ({ ...q })),
+    sources: s.sources.map((x) => ({ ...x })),
+    gridDogs: new Set(s.gridDogs),
     walkers: s.walkers.map((w) => ({ ...w, path: [...w.path] })),
     reserved: new Set(s.reserved),
   };
@@ -55,12 +57,15 @@ export function key(s: BoardState): string {
     .map((cells) => [...cells].sort((a, b) => a - b).join('.'))
     .sort()
     .join('|');
-  const bones = [...s.units]
-    .filter(([, u]) => u.bones > 0)
-    .map(([c, u]) => `${c}:${u.bones}`)
+  const bones = [...s.bones]
+    .map(([c, b]) => `${c}:${b.count}:${b.order}`)
     .sort()
     .join(',');
-  return `${groups}#${bones}#${s.queues.map((q) => q.remaining).join('/')}`;
+  const dogs = s.sources
+    .map((x) => (x.kind === 'queue' ? `q${x.remaining}` : `d${x.cell}`))
+    .sort()
+    .join('/');
+  return `${groups}#${bones}#${dogs}`;
 }
 
 /** Every board a single drag-and-release could produce from here. */
@@ -171,7 +176,7 @@ export function render(s: BoardState): string[] {
     for (let c = 0; c < s.cols; c++) {
       const i = r * s.cols + c;
       const u = s.units.get(i);
-      if (u) line += u.bones > 0 ? u.group[0].toUpperCase() : u.group[0];
+      if (u) line += s.bones.has(i) ? u.group[0].toUpperCase() : u.group[0];
       else if (s.dead.has(i)) line += 'X';
       else if (s.walls.has(i)) line += '#';
       else if (s.bees.has(i)) line += '*';

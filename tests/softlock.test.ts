@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { FIXTURE_LEVELS } from './fixtures/levels';
 import { analyze, distToWin, key, playOut, render } from './softlock/analyze';
 import { parseLevel } from '../src/game/level';
-import { createBoard } from '../src/game/board';
+import { createBoard, queuesOf } from '../src/game/board';
+import { resolveMoves } from '../src/game/resolve';
 import { validateLevel } from '../src/game/validate';
 import { slideGroupBy } from '../src/game/slide';
 import { idx } from '../src/game/cells';
 import type { LevelData } from '../src/shared/types';
+import { levelFromAscii } from './helpers';
 import noBee from './softlock/levels/sl-no-bee.json';
 import oneBee from './softlock/levels/sl-one-bee.json';
 import twoBees from './softlock/levels/sl-two-bees.json';
@@ -89,7 +91,7 @@ describe('sl-one-bee', () => {
     playOut(state);
 
     // Both doors open: the bee owns the whole hall and nobody moves.
-    expect(state.queues[0].remaining).toBe(2);
+    expect(queuesOf(state)[0].remaining).toBe(2);
 
     // Seal the near door with the bone block, the far one with the plain block.
     slideGroupBy(state, 'd', -1, 0);   // d -> (0,1), plugging the left door
@@ -98,7 +100,7 @@ describe('sl-one-bee', () => {
 
     // The hall cleared, and the nearest bone was the plug itself.
     expect(state.units.has(cell(0, 1))).toBe(false);
-    expect(state.queues[0].remaining).toBe(1);
+    expect(queuesOf(state)[0].remaining).toBe(1);
 
     const a = analyze(level);
     expect(a.dead.has(key(state))).toBe(true);
@@ -116,7 +118,7 @@ describe('sl-one-bee', () => {
     slideGroupBy(state, 'p', 1, 0);    // p -> (5,1), plugging the right door
     playOut(state);
 
-    expect(state.queues[0].remaining).toBe(0);
+    expect(queuesOf(state)[0].remaining).toBe(0);
     expect(state.walkers).toEqual([]);
   });
 
@@ -136,7 +138,7 @@ describe('sl-one-bee', () => {
     playOut(state);
 
     expect(state.units.has(cell(0, 0))).toBe(false);   // eaten off the queue
-    expect(state.queues[0].remaining).toBe(1);
+    expect(queuesOf(state)[0].remaining).toBe(1);
     expect(analyze(level).dead.has(key(state))).toBe(true);
   });
 });
@@ -147,5 +149,40 @@ describe('sl-two-bees', () => {
     const a = analyze(twoBees as LevelData);
     expect(a.winnable).toBe(true);
     expect(a.dead.size).toBeGreaterThan(0);
+  });
+});
+
+
+/**
+ * Ordering is the one addition that changes *which* bones are targetable over
+ * time, which the bee-free safety argument never considered. This pins the
+ * behaviour on a deterministic board; the empirical sweep is in docs/soft-locks.md.
+ */
+describe('sl-tiers -- bone order on a bee-free board', () => {
+  const tiered = levelFromAscii(
+    ['.A..', '.#..', '..+.'],
+    [{ c: 0, r: 0, dir: 'up', count: 2 }],
+    { schema: 2 },
+    ['.2..', '....', '..1.'],
+  );
+
+  const at = (c: number, r: number) => idx(4, c, r);
+
+  it('sends the first dog past the near bone to the active tier', () => {
+    const { spec } = parseLevel(tiered);
+    const state = createBoard(spec);
+    // The tier-2 bone sits on the entry cell's neighbour and would be eaten
+    // immediately if tiers did not gate it. The tier-1 grid bone is four cells
+    // away, and goes first.
+    const out = resolveMoves(state);
+    expect(out).toHaveLength(1);
+    expect(out[0].boneCell).toBe(at(2, 2));
+    expect(out[0].path).toEqual([at(0, 0), at(0, 1), at(0, 2), at(1, 2)]);
+  });
+
+  it('is winnable and cannot be locked', () => {
+    const a = analyze(tiered);
+    expect(a.winnable).toBe(true);
+    expect(a.dead.size).toBe(0);
   });
 });

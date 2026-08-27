@@ -10,9 +10,15 @@ import { idx, inBounds, isDir, type Dir } from './cells';
 //   { type: 'wall',  x, y }                     static, unmovable, blocks everything
 //   { type: 'bee',   x, y }                     fixed; poisons every cell it can reach
 //   { type: 'block', x, y, group }              one unit block belonging to `group`
-//   { type: 'bone',  x, y, count? }             rides the block unit in the same cell.
+//   { type: 'bone',  x, y, count?, order? }     rides the block unit in the same cell.
 //                                               count defaults to 1 and stacks, so
 //                                               repeated bone elements also add up.
+//                                               order is the activation tier, default 1.
+//   { type: 'gridBone', x, y, count?, order? }  a bone sitting on the grid itself.
+//                                               Owns its cell and blocks everything
+//                                               until it is eaten.
+//   { type: 'gridDog',  x, y }                  a dog standing on the board. Blocks
+//                                               everything until it eats, then it is gone.
 //   { type: 'queue', x, y, dir, count }         entry cell; dogs line up towards `dir`
 //
 // meta: { schema, cols, rows, timeLimit }
@@ -28,8 +34,14 @@ import { idx, inBounds, isDir, type Dir } from './cells';
  * Edition of the level format.
  *   1 -- initial: dead/wall/bee/block/bone/queue elements, meta cols/rows/timeLimit.
  *        Bones carry an optional `count`; absent means one.
+ *   2 -- bones carry an optional `order` (activation tier, absent means 1), and
+ *        the `gridBone` and `gridDog` elements arrive. An edition-1 level is a
+ *        valid edition-2 level with every bone on tier 1.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+/** Highest activation tier. Matches the editor's nine tier chips. */
+export const MAX_BONE_ORDER = 9;
 
 export const DEFAULT_COLS = 6;
 export const DEFAULT_ROWS = 10;
@@ -37,11 +49,16 @@ export const DEFAULT_TIME_LIMIT = 120;
 export const MIN_DIM = 2;
 export const MAX_DIM = 14;
 
+/** A stack of bones on one cell. Every bone in the stack shares a tier. */
+export interface BoneStack {
+  count: number;
+  /** Activation tier. Tier N is edible once every lower tier is eaten. */
+  order: number;
+}
+
 export interface BlockUnit {
   cell: number;
   group: string;
-  /** How many bones ride this unit. The unit survives until the last one goes. */
-  bones: number;
   /** Dormant in v1 -- reserved for colour-matched dogs and bones. */
   colorKey?: string;
 }
@@ -63,6 +80,10 @@ export interface LevelSpec {
   walls: Set<number>;
   bees: Set<number>;
   units: BlockUnit[];
+  /** Every bone on the board, riding a block or sitting on the grid. */
+  bones: Map<number, BoneStack>;
+  /** Cells holding a dog that stands on the board rather than queueing. */
+  gridDogs: number[];
   queues: QueueSpec[];
 }
 
@@ -89,13 +110,15 @@ export function parseLevel(level: LevelData): ParseResult {
   const timeLimit = timeRaw !== null && timeRaw > 0 ? Math.round(timeRaw) : DEFAULT_TIME_LIMIT;
 
   // Absent means edition 1 -- levels authored before the field existed really
-  // are edition 1. A newer edition is refused loudly rather than guessed at.
+  // are edition 1, so this must stay 1 rather than tracking SCHEMA_VERSION.
+  // A newer edition is refused loudly rather than guessed at.
   const schemaRaw = num(meta.schema);
-  const schema = schemaRaw !== null && schemaRaw >= 1 ? Math.round(schemaRaw) : SCHEMA_VERSION;
+  const schema = schemaRaw !== null && schemaRaw >= 1 ? Math.round(schemaRaw) : 1;
 
   const spec: LevelSpec = {
     schema, cols, rows, timeLimit,
-    dead: new Set(), walls: new Set(), bees: new Set(), units: [], queues: [],
+    dead: new Set(), walls: new Set(), bees: new Set(),
+    units: [], bones: new Map(), gridDogs: [], queues: [],
   };
   const issues: string[] = [];
 
@@ -108,8 +131,7 @@ export function parseLevel(level: LevelData): ParseResult {
 
   // One occupant per cell: dead / wall / bee / block are mutually exclusive.
   const occupant = new Map<number, string>();
-  const unitAt = new Map<number, BlockUnit>();
-  const bones: Array<{ cell: number; count: number }> = [];
+  const bones: Array<{ cell: number; count: number; order: number; onGrid: boolean }> = [];
   let queueSeq = 0;
 
   const cellOf = (el: GameElement): number | null => {
@@ -129,9 +151,18 @@ export function parseLevel(level: LevelData): ParseResult {
       continue;
     }
 
-    if (el.type === 'bone') {
+    if (el.type === 'bone' || el.type === 'gridBone') {
       const raw = num(el.count);
-      bones.push({ cell, count: Math.max(1, Math.round(raw ?? 1)) });
+      const rawOrder = num(el.order);
+      const order = rawOrder === null
+        ? 1
+        : Math.min(MAX_BONE_ORDER, Math.max(1, Math.round(rawOrder)));
+      bones.push({
+        cell,
+        count: Math.max(1, Math.round(raw ?? 1)),
+        order,
+        onGrid: el.type === 'gridBone',
+      });
       continue;
     }
 
@@ -153,12 +184,12 @@ export function parseLevel(level: LevelData): ParseResult {
       case 'dead': spec.dead.add(cell); occupant.set(cell, 'dead'); break;
       case 'wall': spec.walls.add(cell); occupant.set(cell, 'wall'); break;
       case 'bee': spec.bees.add(cell); occupant.set(cell, 'bee'); break;
+      case 'gridDog': spec.gridDogs.push(cell); occupant.set(cell, 'gridDog'); break;
       case 'block': {
         const group = typeof el.group === 'string' && el.group ? el.group : `g-${cell}`;
-        const unit: BlockUnit = { cell, group, bones: 0 };
+        const unit: BlockUnit = { cell, group };
         if (typeof el.colorKey === 'string') unit.colorKey = el.colorKey;
         spec.units.push(unit);
-        unitAt.set(cell, unit);
         occupant.set(cell, 'block');
         break;
       }
@@ -167,21 +198,38 @@ export function parseLevel(level: LevelData): ParseResult {
     }
   }
 
-  // Bones ride block units. A bone with no host is not representable at runtime.
-  for (const { cell, count } of bones) {
-    const host = unitAt.get(cell);
-    if (!host) { issues.push(`bone at cell ${cell} dropped -- no block unit to ride`); continue; }
-    host.bones += count;
+  // A `bone` rides a block unit; a `gridBone` owns its cell outright. Bones are
+  // resolved after the main pass so they may appear before their block in the file.
+  const blockCells = new Set(spec.units.map((u) => u.cell));
+  for (const { cell, count, order, onGrid } of bones) {
+    if (onGrid) {
+      const taken = occupant.get(cell);
+      if (taken) { issues.push(`gridBone at cell ${cell} dropped -- already occupied by ${taken}`); continue; }
+    } else if (!blockCells.has(cell)) {
+      issues.push(`bone at cell ${cell} dropped -- no block unit to ride`);
+      continue;
+    }
+
+    const have = spec.bones.get(cell);
+    // One tier per cell. Repeated elements stack the count; the first tier seen
+    // wins, so the result does not depend on element order in the file.
+    if (have) have.count += count;
+    else {
+      spec.bones.set(cell, { count, order });
+      if (onGrid) occupant.set(cell, 'gridBone');
+    }
   }
 
   return { spec, issues };
 }
 
-/** Total bones on the board, counting a stacked unit once per bone. */
+/** Total bones on the board, counting a stacked cell once per bone. */
 export function countBones(spec: LevelSpec): number {
-  return spec.units.reduce((n, u) => n + u.bones, 0);
+  let n = 0;
+  for (const stack of spec.bones.values()) n += stack.count;
+  return n;
 }
 
 export function countDogs(spec: LevelSpec): number {
-  return spec.queues.reduce((n, q) => n + q.count, 0);
+  return spec.queues.reduce((n, q) => n + q.count, 0) + spec.gridDogs.length;
 }

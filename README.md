@@ -16,12 +16,19 @@ multi-queue system on the grid edges.
 - **Block groups** are one or more unit blocks that move as a piece. Free drag:
   the group follows your finger cell by cell and stops the moment any unit hits
   a wall, another group, a bee, a dog or the grid edge.
-- **Bones** ride block units, so they move with their group. A unit can carry a
-  stack of them: each dog takes one, and the unit is only destroyed when its
-  last bone goes.
-- **Dogs** wait in queues on the grid boundary. Only the leader is live. On drag
-  release, any leader with a safe route sets off on its own, walks in, eats a
-  bone, and destroys its host unit. The queue then advances.
+- **Bones** ride block units, so they move with their group — or sit on a grid
+  cell of their own, where they block like a wall until eaten. Either way a cell
+  can carry a stack: each dog takes one, and the cell only clears when its last
+  bone goes.
+- **Bone tiers.** Every bone belongs to a numbered tier, and a tier cannot be
+  eaten until every lower tier is gone. Locked bones are drawn greyed — visible,
+  still blocking, not yet claimable. A tier unlocks when the last lower-tier
+  bone is *eaten*, not when it is claimed.
+- **Dogs** wait in queues on the grid boundary, or stand on the board itself.
+  Only a queue's leader is live. On drag release, any dog with a safe route sets
+  off on its own, walks in, eats a bone, and destroys its host unit if it had
+  one. The queue then advances. A dog standing on the board blocks like a wall
+  until it eats, and then it is gone.
 - **A committed bone is pinned.** Once a dog sets off for a bone, that block
   group cannot be moved until it has eaten — the bone can't be pulled out from
   under it.
@@ -62,6 +69,10 @@ Everything in `gameSettings.json` is safe to edit without touching code.
 - `debug.showBeeReach` — paints every cell a bee can currently reach. On by
   default; it is the only way to see *why* a dog is refusing to move.
 - `debug.showRoutes` — highlights the cells a walking dog has locked.
+- `colors.tierBadge` / `tierBadgeLocked` — the bone-tier square. It is a filled
+  square on purpose: the bone *count* is a round dark pip on the opposite
+  corner, and two dark circles were indistinguishable at cell size. Keep these
+  light enough for `colors.tierBadgeText` to read on.
 
 ## Authoring levels
 
@@ -91,19 +102,25 @@ To change a published level: copy it down, edit, publish again.
   paint them together.
 - **Move**: drag a whole block group somewhere else. Green means it fits, red
   means it does not, and an invalid drop puts it back.
-- **Bone**: tap a block to add a bone; shift-tap takes one off. Up to 9 per
-  unit, shown as a count.
+- **Bone**: tap a block for a bone that rides it, or bare ground for one that
+  sits on the grid and blocks like a wall. Shift-tap takes one off. Up to 9 per
+  cell, shown as a count. The tier chips set which tier new bones join, and a
+  tier badge only appears once a level uses more than one.
+- **Dog**: tap a cell to stand a dog on the board. It blocks until it eats.
+  A warning appears if a bee can reach it, since it could never set off.
 - **Wall / Bee / Off**: tap cells. *Off* is how you cut a level into islands.
-- **Queue**: tap a boundary cell to add one, tap it again to select it, then use
-  Turn, the dog stepper, or Remove.
+- **Queue**: tap a boundary cell to add one. Tap it again to select it, then tap
+  for one more dog and shift-tap for one fewer — the same gesture the Bone tool
+  uses for a stack. Turn and Remove stay buttons, so a stray tap cannot destroy
+  a queue you were only editing.
 - Warnings appear live and never block a save.
 
 **Keyboard (desktop):**
 
 | key | does |
 | --- | --- |
-| `1`–`8` | pick a tool: Block, Move, Bone, Wall, Bee, Off, Queue, Erase |
-| `⇧1`–`⇧9` | pick a paint colour, while the Block tool is up |
+| `1`–`9` | pick a tool: Block, Move, Bone, Wall, Bee, Off, Queue, Dog, Erase |
+| `⇧1`–`⇧9` | pick a paint colour (Block tool) or a bone tier (Bone tool) |
 
 **Download all** saves every level in the current tab as its own `.json`.
 
