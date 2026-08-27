@@ -1,6 +1,6 @@
 import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
 import { activeOrder, isPassable } from './board';
-import type { BoardState, RuntimeQueue } from './board';
+import type { BoardState, DogSource } from './board';
 
 /**
  * Every cell a bee can currently get to, flooding outward through open cells.
@@ -60,20 +60,26 @@ export interface Route {
  */
 export function findRoute(
   state: BoardState,
-  queue: RuntimeQueue,
+  source: DogSource,
   bees: Set<number>,
   claimedBones: BoneClaims,
 ): Route | null {
-  const entry = queue.cell;
+  const entry = source.cell;
   // Computed once: findRoute is a BFS and would otherwise recompute it per cell.
   const order = activeOrder(state);
   if (order === null) return null;
 
-  // A bone parked on the entry cell is right under the leader's nose. It eats
-  // from where it stands, without stepping onto the board -- an empty route.
-  if (free(state, entry, claimedBones, order) > 0) return { path: [], boneCell: entry };
+  // A bone parked on a queue's entry cell is right under the leader's nose. It
+  // eats from where it stands, without stepping onto the board -- an empty
+  // route. No cells are walked, so there is nothing for a bee to poison.
+  if (source.kind === 'queue' && free(state, entry, claimedBones, order) > 0) {
+    return { path: [], boneCell: entry };
+  }
 
-  if (!isPassable(state, entry) || bees.has(entry)) return null;
+  // A grid dog is already standing on the board, so its own cell is the first
+  // step of its route -- occupied by itself, and never `isPassable`.
+  if (source.kind === 'queue' && (!isPassable(state, entry) || bees.has(entry))) return null;
+  if (source.kind === 'grid' && bees.has(entry)) return null;
 
   const prev = new Map<number, number>();
   const seen = new Set<number>([entry]);

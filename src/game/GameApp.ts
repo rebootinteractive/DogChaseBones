@@ -5,7 +5,7 @@ import { STAGE_H, STAGE_W } from '../shared/stage';
 import { SETTINGS } from './settings';
 import { parseLevel } from './level';
 import type { LevelSpec } from './level';
-import { createBoard, dogsRemaining, queueSlot } from './board';
+import { createBoard, dogsRemaining, queueSlot, queuesOf } from './board';
 import type { BoardState, RuntimeQueue, Walker } from './board';
 import { cellAt, cellCenter, colRowCenter, computeCamera, toCellDelta } from './camera';
 import type { Camera } from './camera';
@@ -137,7 +137,7 @@ export class GameApp {
   private rebuildBadges() {
     for (const label of this.badgeLabels) { this.hud.removeChild(label); label.destroy(); }
     this.badgeLabels = [];
-    for (const _q of this.state.queues) {
+    for (const _q of queuesOf(this.state)) {
       const label = new Text({
         text: '',
         style: new TextStyle({ fill: C.badgeText, fontSize: 11, fontFamily: 'system-ui, sans-serif' }),
@@ -188,7 +188,7 @@ export class GameApp {
   /** Every queue leader with a safe route sets off. Called on release and after each bone. */
   private sendDogs() {
     for (const c of resolveMoves(this.state)) {
-      const walker = this.state.walkers.find((w) => w.queueId === c.queueId && w.boneCell === c.boneCell);
+      const walker = this.state.walkers.find((w) => w.sourceId === c.sourceId && w.boneCell === c.boneCell);
       if (walker) this.anims.push({ walker, progress: -1, enterDelay: T.dogEnterDelay, eating: 0, arrived: false });
     }
   }
@@ -310,10 +310,16 @@ export class GameApp {
     this.dogG.clear();
     const size = this.cam.cell * L.queueDogScale;
 
-    this.state.queues.forEach((q, i) => {
+    // Dogs standing on the board, waiting for a safe route out of their cell.
+    for (const cell of this.state.gridDogs) {
+      const p = cellCenter(this.cam, cell);
+      drawDog(this.dogG, p.x, p.y, size);
+    }
+
+    queuesOf(this.state).forEach((q, i) => {
       // While this queue's leader is still stepping in from outside, the dogs
       // behind it hold back one slot so they do not draw on top of it.
-      const entering = this.anims.some((a) => a.walker.queueId === q.id && a.progress < 0);
+      const entering = this.anims.some((a) => a.walker.sourceId === q.id && a.progress < 0);
       const first = entering ? 1 : 0;
       const drawn = Math.min(q.remaining, L.queueMaxDrawn);
       for (let n = 0; n < drawn; n++) {
@@ -367,7 +373,9 @@ export class GameApp {
 
   private pathPoint(walker: Walker, i: number): { x: number; y: number } {
     if (i >= 0) return cellCenter(this.cam, walker.path[i]);
-    const q = this.state.queues.find((x) => x.id === walker.queueId)!;
+    // A grid dog has no off-board slot: it starts on the board, at path[0].
+    const q = queuesOf(this.state).find((x) => x.id === walker.sourceId);
+    if (!q) return cellCenter(this.cam, walker.path[0]);
     const slot = queueSlot(this.state, q, 0);
     return colRowCenter(this.cam, slot.c, slot.r);
   }
@@ -406,7 +414,7 @@ export class GameApp {
 
     this.hud.addChild(this.nameText, this.timerText, this.dogsText, icon);
 
-    for (const _q of this.state.queues) {
+    for (const _q of queuesOf(this.state)) {
       const label = new Text({
         text: '',
         style: new TextStyle({ fill: C.badgeText, fontSize: 11, fontFamily: 'system-ui, sans-serif' }),

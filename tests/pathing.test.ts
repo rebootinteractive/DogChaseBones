@@ -1,3 +1,4 @@
+import { queuesOf } from '../src/game/board';
 import { describe, it, expect } from 'vitest';
 import { beeReach, findRoute } from '../src/game/pathing';
 import { boardFromAscii } from './helpers';
@@ -44,7 +45,7 @@ describe('beeReach', () => {
 });
 
 describe('findRoute', () => {
-  const queue = (cell: number) => ({ id: 'q0', cell, dir: 'up' as const, remaining: 1 });
+  const queue = (cell: number) => ({ kind: 'queue' as const, id: 'q0', cell, dir: 'up' as const, remaining: 1 });
 
   it('walks open cells and stops beside the bone', () => {
     const b = boardFromAscii(['..A.', '####']);
@@ -104,7 +105,7 @@ describe('findRoute', () => {
 });
 
 describe('eating straight off the queue', () => {
-  const queue = (cell: number) => ({ id: 'q0', cell, dir: 'left' as const, remaining: 1 });
+  const queue = (cell: number) => ({ kind: 'queue' as const, id: 'q0', cell, dir: 'left' as const, remaining: 1 });
 
   it('takes a bone parked on the entry cell without stepping onto the board', () => {
     const b = boardFromAscii(['A...', '....']);
@@ -141,7 +142,7 @@ describe('bone tiers', () => {
     const b = boardFromAscii(['.A..', '.B..'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
     b.bones.get(1)!.order = 2;
     expect(b.bones.get(5)!.order).toBe(1);
-    const route = findRoute(b, b.queues[0], new Set(), noClaims)!;
+    const route = findRoute(b, queuesOf(b)[0], new Set(), noClaims)!;
     expect(route.boneCell).toBe(5);
     expect(route.path).toEqual([0, 4]);
   });
@@ -154,7 +155,7 @@ describe('bone tiers', () => {
     b.bones.delete(5);
     b.units.delete(5);
     b.groups.delete('b');
-    expect(findRoute(b, b.queues[0], new Set(), noClaims)!.boneCell).toBe(1);
+    expect(findRoute(b, queuesOf(b)[0], new Set(), noClaims)!.boneCell).toBe(1);
   });
 
   it('reads tiers straight off an authored board', () => {
@@ -164,7 +165,7 @@ describe('bone tiers', () => {
 
   it('routes to a bone standing on the grid', () => {
     const b = boardFromAscii(['..+.', '####'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
-    const route = findRoute(b, b.queues[0], new Set(), noClaims)!;
+    const route = findRoute(b, queuesOf(b)[0], new Set(), noClaims)!;
     expect(route.boneCell).toBe(2);
     expect(route.path).toEqual([0, 1]);
   });

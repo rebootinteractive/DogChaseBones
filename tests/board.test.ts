@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boundaryDirs, bonesRemaining, dogsRemaining, islands, removeUnit, takeBone, activeOrder } from '../src/game/board';
+import { boundaryDirs, bonesRemaining, dogsRemaining, islands, removeUnit, takeBone, activeOrder, queuesOf, isBlocked } from '../src/game/board';
 import { stepGroup } from '../src/game/slide';
 import { boardFromAscii, specFromAscii, toAscii } from './helpers';
 
@@ -77,8 +77,8 @@ describe('dogsRemaining', () => {
   it('counts queued dogs plus dogs already on the board', () => {
     const b = boardFromAscii(['A..', '...'], [{ c: 0, r: 1, dir: 'down', count: 3 }]);
     expect(dogsRemaining(b)).toBe(3);
-    b.queues[0].remaining--;
-    b.walkers.push({ queueId: 'q0', path: [3], step: 0, boneCell: 0 });
+    queuesOf(b)[0].remaining--;
+    b.walkers.push({ sourceId: 'q0', path: [3], step: 0, boneCell: 0 });
     expect(dogsRemaining(b)).toBe(3);
   });
 });
@@ -182,5 +182,19 @@ describe('activeOrder', () => {
   it('is null when every bone is gone', () => {
     const b = boardFromAscii(['a...', '....']);
     expect(activeOrder(b)).toBe(null);
+  });
+});
+
+describe('dog sources', () => {
+  it('puts a grid dog in sources and indexes its cell', () => {
+    const b = boardFromAscii(['.@.+', '....']);
+    expect(b.sources).toEqual([{ kind: 'grid', id: 'd0', cell: 1 }]);
+    expect(b.gridDogs.has(1)).toBe(true);
+    expect(dogsRemaining(b)).toBe(1);
+  });
+
+  it('blocks its cell', () => {
+    const b = boardFromAscii(['a@..', '....']);
+    expect(isBlocked(b, 1)).toBe(true);
   });
 });

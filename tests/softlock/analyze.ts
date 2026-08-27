@@ -33,7 +33,8 @@ export function cloneState(s: BoardState): BoardState {
     units: new Map([...s.units].map(([c, u]) => [c, { ...u }])),
     bones: new Map([...s.bones].map(([c, b]) => [c, { ...b }])),
     groups: new Map([...s.groups].map(([g, cells]) => [g, new Set(cells)])),
-    queues: s.queues.map((q) => ({ ...q })),
+    sources: s.sources.map((x) => ({ ...x })),
+    gridDogs: new Set(s.gridDogs),
     walkers: s.walkers.map((w) => ({ ...w, path: [...w.path] })),
     reserved: new Set(s.reserved),
   };
@@ -57,10 +58,14 @@ export function key(s: BoardState): string {
     .sort()
     .join('|');
   const bones = [...s.bones]
-    .map(([c, b]) => `${c}:${b.count}`)
+    .map(([c, b]) => `${c}:${b.count}:${b.order}`)
     .sort()
     .join(',');
-  return `${groups}#${bones}#${s.queues.map((q) => q.remaining).join('/')}`;
+  const dogs = s.sources
+    .map((x) => (x.kind === 'queue' ? `q${x.remaining}` : `d${x.cell}`))
+    .sort()
+    .join('/');
+  return `${groups}#${bones}#${dogs}`;
 }
 
 /** Every board a single drag-and-release could produce from here. */

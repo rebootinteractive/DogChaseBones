@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FIXTURE_LEVELS } from './fixtures/levels';
 import { analyze, distToWin, key, playOut, render } from './softlock/analyze';
 import { parseLevel } from '../src/game/level';
-import { createBoard } from '../src/game/board';
+import { createBoard, queuesOf } from '../src/game/board';
 import { validateLevel } from '../src/game/validate';
 import { slideGroupBy } from '../src/game/slide';
 import { idx } from '../src/game/cells';
@@ -89,7 +89,7 @@ describe('sl-one-bee', () => {
     playOut(state);
 
     // Both doors open: the bee owns the whole hall and nobody moves.
-    expect(state.queues[0].remaining).toBe(2);
+    expect(queuesOf(state)[0].remaining).toBe(2);
 
     // Seal the near door with the bone block, the far one with the plain block.
     slideGroupBy(state, 'd', -1, 0);   // d -> (0,1), plugging the left door
@@ -98,7 +98,7 @@ describe('sl-one-bee', () => {
 
     // The hall cleared, and the nearest bone was the plug itself.
     expect(state.units.has(cell(0, 1))).toBe(false);
-    expect(state.queues[0].remaining).toBe(1);
+    expect(queuesOf(state)[0].remaining).toBe(1);
 
     const a = analyze(level);
     expect(a.dead.has(key(state))).toBe(true);
@@ -116,7 +116,7 @@ describe('sl-one-bee', () => {
     slideGroupBy(state, 'p', 1, 0);    // p -> (5,1), plugging the right door
     playOut(state);
 
-    expect(state.queues[0].remaining).toBe(0);
+    expect(queuesOf(state)[0].remaining).toBe(0);
     expect(state.walkers).toEqual([]);
   });
 
@@ -136,7 +136,7 @@ describe('sl-one-bee', () => {
     playOut(state);
 
     expect(state.units.has(cell(0, 0))).toBe(false);   // eaten off the queue
-    expect(state.queues[0].remaining).toBe(1);
+    expect(queuesOf(state)[0].remaining).toBe(1);
     expect(analyze(level).dead.has(key(state))).toBe(true);
   });
 });

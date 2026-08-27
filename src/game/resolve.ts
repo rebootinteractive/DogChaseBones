@@ -1,4 +1,4 @@
-import { takeBone } from './board';
+import { syncGridDogs, takeBone } from './board';
 import type { BoardState, Walker } from './board';
 import { beeReach, findRoute } from './pathing';
 
@@ -16,7 +16,7 @@ function syncReserved(state: BoardState) {
 }
 
 export interface Commitment {
-  queueId: string;
+  sourceId: string;
   path: number[];
   boneCell: number;
 }
@@ -42,7 +42,7 @@ function claimedBones(state: BoardState): Map<number, number> {
  */
 export function resolveMoves(state: BoardState): Commitment[] {
   const committed: Commitment[] = [];
-  const busy = new Set(state.walkers.map((w) => w.queueId));
+  const busy = new Set(state.walkers.map((w) => w.sourceId));
   let progressed = true;
 
   while (progressed) {
@@ -50,18 +50,27 @@ export function resolveMoves(state: BoardState): Commitment[] {
     const bees = beeReach(state);
     const claimed = claimedBones(state);
 
-    for (const q of state.queues) {
-      if (q.remaining <= 0 || busy.has(q.id)) continue;
+    for (const source of [...state.sources]) {
+      if (busy.has(source.id)) continue;
+      if (source.kind === 'queue' && source.remaining <= 0) continue;
 
-      const route = findRoute(state, q, bees, claimed);
+      const route = findRoute(state, source, bees, claimed);
       if (!route) continue;
 
-      q.remaining--;
-      busy.add(q.id);
+      if (source.kind === 'queue') {
+        source.remaining--;
+      } else {
+        // A grid dog is one dog. It leaves `sources` and becomes a walker; its
+        // cell stays blocked because its whole path is reserved.
+        state.sources = state.sources.filter((s) => s !== source);
+        syncGridDogs(state);
+      }
+
+      busy.add(source.id);
       claimed.set(route.boneCell, (claimed.get(route.boneCell) ?? 0) + 1);
-      state.walkers.push({ queueId: q.id, path: route.path, step: -1, boneCell: route.boneCell });
+      state.walkers.push({ sourceId: source.id, path: route.path, step: -1, boneCell: route.boneCell });
       syncReserved(state);
-      committed.push({ queueId: q.id, path: route.path, boneCell: route.boneCell });
+      committed.push({ sourceId: source.id, path: route.path, boneCell: route.boneCell });
       progressed = true;
     }
   }
@@ -93,5 +102,6 @@ export function finishWalker(state: BoardState, walker: Walker): EatResult {
 }
 
 export function isWon(state: BoardState): boolean {
-  return state.walkers.length === 0 && state.queues.every((q) => q.remaining <= 0);
+  // A grid dog still in `sources` fails the queue test, so it keeps the level open.
+  return state.walkers.length === 0 && state.sources.every((s) => s.kind === 'queue' && s.remaining <= 0);
 }

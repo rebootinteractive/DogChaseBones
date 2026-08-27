@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FIXTURE_LEVELS } from './fixtures/levels';
 import { SCHEMA_VERSION, countBones, countDogs, parseLevel } from '../src/game/level';
-import { createBoard } from '../src/game/board';
+import { createBoard, queuesOf } from '../src/game/board';
 import type { BoardState } from '../src/game/board';
 import { validateLevel } from '../src/game/validate';
 import { finishWalker, isWon, resolveMoves } from '../src/game/resolve';
@@ -86,7 +86,7 @@ describe('3 - Sealed Room', () => {
 
     // The bee floods up through the gap, so the whole top room is off limits.
     expect(playOut(state)).toBe(0);
-    expect(state.queues[0].remaining).toBe(2);
+    expect(queuesOf(state)[0].remaining).toBe(2);
 
     expect(slideGroupBy(state, 'p', -1, 0)).toEqual({ dc: -1, dr: 0 });
     expect(state.units.has(cell(3, 1))).toBe(true);

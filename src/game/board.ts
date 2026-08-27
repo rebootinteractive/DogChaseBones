@@ -7,17 +7,20 @@ export interface Unit {
   colorKey?: string;
 }
 
-export interface RuntimeQueue {
-  id: string;
-  cell: number;
-  dir: Dir;
-  /** Dogs still waiting, leader included. */
-  remaining: number;
-}
+/**
+ * Where a dog comes from. A queue holds several dogs at an off-board slot and
+ * only its leader is live; a grid dog is a single dog standing on a cell it
+ * occupies. Both walk the same route-finding and eating path.
+ */
+export type DogSource =
+  | { kind: 'queue'; id: string; cell: number; dir: Dir; remaining: number }
+  | { kind: 'grid'; id: string; cell: number };
+
+export type RuntimeQueue = Extract<DogSource, { kind: 'queue' }>;
 
 /** A dog that has committed to a route. Its whole path is reserved until it eats. */
 export interface Walker {
-  queueId: string;
+  sourceId: string;
   /** Cells from the entry cell to the cell the dog eats from. */
   path: number[];
   /** Index into `path`; -1 while the dog is still outside the grid. */
@@ -35,7 +38,14 @@ export interface BoardState {
   /** Every bone by cell, riding a block or sitting on the grid. */
   bones: Map<number, BoneStack>;
   groups: Map<string, Set<number>>;
-  queues: RuntimeQueue[];
+  /** Every dog still to walk -- queues, and dogs standing on the board. */
+  sources: DogSource[];
+  /**
+   * Cells held by a grid dog. A derived index over `sources`, rebuilt rather
+   * than patched so it can never drift -- `isBlocked` runs hot and needs a cell
+   * lookup, but `sources` stays the only place a grid dog lives.
+   */
+  gridDogs: Set<number>;
   walkers: Walker[];
   /** Union of every walker's path. Blocks slides, dogs and bee flood alike. */
   reserved: Set<number>;
@@ -79,7 +89,11 @@ export function createBoard(spec: LevelSpec): BoardState {
     units,
     bones: new Map([...spec.bones].map(([cell, s]) => [cell, { ...s }])),
     groups,
-    queues: spec.queues.map((q) => ({ id: q.id, cell: q.cell, dir: q.dir, remaining: q.count })),
+    sources: [
+      ...spec.queues.map((q): DogSource => ({ kind: 'queue', id: q.id, cell: q.cell, dir: q.dir, remaining: q.count })),
+      ...spec.gridDogs.map((cell, n): DogSource => ({ kind: 'grid', id: `d${n}`, cell })),
+    ],
+    gridDogs: new Set(spec.gridDogs),
     walkers: [],
     reserved: new Set(),
   };
@@ -93,6 +107,7 @@ export function isBlocked(state: BoardState, cell: number): boolean {
     state.bees.has(cell) ||
     state.units.has(cell) ||
     state.bones.has(cell) ||
+    state.gridDogs.has(cell) ||
     state.reserved.has(cell)
   );
 }
@@ -249,5 +264,20 @@ export function bonesRemaining(state: BoardState): number {
 }
 
 export function dogsRemaining(state: BoardState): number {
-  return state.queues.reduce((n, q) => n + q.remaining, 0) + state.walkers.length;
+  const waiting = state.sources.reduce((n, s) => n + (s.kind === 'queue' ? s.remaining : 1), 0);
+  return waiting + state.walkers.length;
+}
+
+/**
+ * Rebuild the grid-dog cell index from `sources`. Derived rather than patched,
+ * so it can never drift -- the same discipline as `syncReserved`.
+ */
+export function syncGridDogs(state: BoardState) {
+  state.gridDogs.clear();
+  for (const s of state.sources) if (s.kind === 'grid') state.gridDogs.add(s.cell);
+}
+
+/** The queue sources, for render code that draws waiting lines of dogs. */
+export function queuesOf(state: BoardState): RuntimeQueue[] {
+  return state.sources.filter((s): s is RuntimeQueue => s.kind === 'queue');
 }

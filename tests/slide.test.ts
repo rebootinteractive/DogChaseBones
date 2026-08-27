@@ -110,3 +110,10 @@ describe('grid bones block sliding', () => {
     expect(b.units.has(5)).toBe(false);
   });
 });
+
+describe('grid dogs block sliding', () => {
+  it('stops a group dead', () => {
+    const b = boardFromAscii(['a.@.', '....']);
+    expect(slideGroupBy(b, 'a', 3, 0)).toEqual({ dc: 1, dr: 0 });
+  });
+});

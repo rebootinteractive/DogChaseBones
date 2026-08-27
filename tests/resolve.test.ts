@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bonesRemaining } from '../src/game/board';
+import { bonesRemaining, queuesOf, isBlocked, dogsRemaining } from '../src/game/board';
 import { finishWalker, isWon, resolveMoves } from '../src/game/resolve';
 import { canStepGroup, slideGroupBy } from '../src/game/slide';
 import { boardFromAscii, toAscii } from './helpers';
@@ -9,8 +9,8 @@ describe('resolveMoves', () => {
     const b = boardFromAscii(['..A.', '####'], [{ c: 0, r: 0, dir: 'up', count: 2 }]);
     const out = resolveMoves(b);
     expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ queueId: 'q0', boneCell: 2 });
-    expect(b.queues[0].remaining).toBe(1);
+    expect(out[0]).toMatchObject({ sourceId: 'q0', boneCell: 2 });
+    expect(queuesOf(b)[0].remaining).toBe(1);
     // route cells 0 and 1, plus cell 2 so the bone cannot be slid away
     expect([...b.reserved].sort((x, y) => x - y)).toEqual([0, 1, 2]);
   });
@@ -25,7 +25,7 @@ describe('resolveMoves', () => {
   it('sends nothing while the bee can reach the only corridor', () => {
     const b = boardFromAscii(['..A.', '....', '.*..'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
     expect(resolveMoves(b)).toEqual([]);
-    expect(b.queues[0].remaining).toBe(1);
+    expect(queuesOf(b)[0].remaining).toBe(1);
   });
 
   it('runs at most one dog per queue at a time', () => {
@@ -73,7 +73,7 @@ describe('finishWalker', () => {
     resolveMoves(b);
     finishWalker(b, b.walkers[0]);
     expect(resolveMoves(b)).toHaveLength(1);
-    expect(b.queues[0].remaining).toBe(0);
+    expect(queuesOf(b)[0].remaining).toBe(0);
   });
 });
 
@@ -95,7 +95,7 @@ describe('eating off the queue', () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ path: [], boneCell: 0 });
     expect([...b.reserved]).toEqual([0]);   // no route walked, but the bone is pinned
-    expect(b.queues[0].remaining).toBe(0);
+    expect(queuesOf(b)[0].remaining).toBe(0);
   });
 
   it('leaves other groups free to slide while it eats', () => {
@@ -247,5 +247,55 @@ describe('the bone a dog has committed to', () => {
 
     finishWalker(b, b.walkers[0]);
     expect(b.reserved.size).toBe(0);
+  });
+});
+
+describe('grid dogs', () => {
+  it('walks to a bone and frees its cell only after eating', () => {
+    const b = boardFromAscii(['@..A', '####']);
+    const out = resolveMoves(b);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ sourceId: 'd0', boneCell: 3 });
+    expect(b.sources).toEqual([]);          // it is a walker now, not a waiter
+    expect(isBlocked(b, 0)).toBe(true);     // its cell is still reserved
+    finishWalker(b, b.walkers[0]);
+    expect(isBlocked(b, 0)).toBe(false);
+    expect(isWon(b)).toBe(true);
+  });
+
+  it('eats a bone already beside it without walking', () => {
+    const b = boardFromAscii(['@A..', '####']);
+    const out = resolveMoves(b);
+    expect(out[0].path).toEqual([0]);       // it eats from where it stands
+    finishWalker(b, b.walkers[0]);
+    expect(isWon(b)).toBe(true);
+  });
+
+  it('is counted once until it has eaten', () => {
+    const b = boardFromAscii(['@..A', '####']);
+    expect(dogsRemaining(b)).toBe(1);
+    resolveMoves(b);
+    expect(dogsRemaining(b)).toBe(1);       // now a walker, still one dog
+    finishWalker(b, b.walkers[0]);
+    expect(dogsRemaining(b)).toBe(0);
+  });
+
+  it('keeps the level open while it still stands there', () => {
+    const b = boardFromAscii(['@#.A', '####']);
+    resolveMoves(b);
+    expect(b.walkers).toHaveLength(0);      // walled off, cannot reach the bone
+    expect(isWon(b)).toBe(false);
+  });
+
+  it('lets two dogs claim two bones off one grid stack', () => {
+    const b = boardFromAscii(['..+.', '####'], [{ c: 0, r: 0, dir: 'up', count: 2 }]);
+    b.bones.set(2, { count: 2, order: 1 });
+    expect(resolveMoves(b)).toHaveLength(1);   // one queue runs one dog at a time
+    finishWalker(b, b.walkers[0]);
+    expect(b.bones.get(2)!.count).toBe(1);
+    expect(resolveMoves(b)).toHaveLength(1);
+    finishWalker(b, b.walkers[0]);
+    expect(b.bones.has(2)).toBe(false);
+    expect(isWon(b)).toBe(true);
   });
 });
