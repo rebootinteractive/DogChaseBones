@@ -6,3 +6,6 @@ dist
 # .env holds the public Supabase key and IS committed -- see docs/level-data.md.
 # .env.local stays out, for personal overrides.
 .env.local
+
+# SDD scratch: ledgers, briefs, review packages. Never committed.
+.superpowers/
