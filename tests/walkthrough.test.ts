@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { FIXTURE_LEVELS } from './fixtures/levels';
 import { SCHEMA_VERSION, countBones, countDogs, parseLevel } from '../src/game/level';
-import { createBoard, queuesOf } from '../src/game/board';
+import { createBoard, queuesOf, bonesRemaining, dogsRemaining } from '../src/game/board';
 import type { BoardState } from '../src/game/board';
 import { validateLevel } from '../src/game/validate';
 import { finishWalker, isWon, resolveMoves } from '../src/game/resolve';
 import { slideGroupBy } from '../src/game/slide';
 import { idx } from '../src/game/cells';
+import type { LevelData } from '../src/shared/types';
 
 /** Headless play: send every dog that can go, land it instantly, repeat. */
 function playOut(state: BoardState): number {
@@ -100,5 +101,59 @@ describe('3 - Sealed Room', () => {
     slideGroupBy(state, 'p', -1, 0);
     slideGroupBy(state, 'p', 1, 0);
     expect(playOut(state)).toBe(0);
+  });
+});
+
+/**
+ * A level shaped exactly as the editor's `snapshot()` emits one: every new
+ * element type, explicit `order` on every bone, schema 2. The editor itself
+ * needs a DOM and Pixi, so this is what stands in for it -- it checks the
+ * contract between what the editor writes and what the game reads.
+ */
+describe('an edition-2 level with all the new pieces', () => {
+  const level: LevelData = {
+    id: 'e2e-schema-2',
+    name: 'Grid Pieces',
+    prototype: 'dog-chase-bones',
+    elements: [
+      { type: 'wall', x: 3, y: 1 },
+      { type: 'block', x: 1, y: 0, group: 'g1' },
+      { type: 'bone', x: 1, y: 0, count: 2, order: 3 },
+      { type: 'gridBone', x: 3, y: 2, count: 1, order: 2 },
+      { type: 'gridBone', x: 0, y: 2, count: 1, order: 1 },
+      { type: 'gridDog', x: 0, y: 1 },
+      { type: 'queue', x: 3, y: 0, dir: 'up', count: 3 },
+    ],
+    meta: { schema: 2, cols: 4, rows: 3, timeLimit: 120 },
+  };
+
+  it('parses clean, with four dogs and four bones', () => {
+    const { spec, issues } = parseLevel(level);
+    expect(issues).toEqual([]);
+    expect(spec.schema).toBe(2);
+    expect(countBones(spec)).toBe(4);
+    expect(countDogs(spec)).toBe(4);
+    expect(validateLevel(spec)).toEqual([]);
+  });
+
+  it('plays through to a win, tier by tier', () => {
+    const { spec } = parseLevel(level);
+    const state = createBoard(spec);
+
+    // The tier-3 bone sits two cells from the queue and stays untouched while
+    // tiers 1 and 2 are still on the board.
+    const first = resolveMoves(state);
+    expect(first.length).toBeGreaterThan(0);
+    // Tier 1 is the grid bone at (0,2), nowhere near the queue -- and the grid
+    // dog at (0,1) is right beside it, so it eats where it stands.
+    expect(first.map((c) => c.boneCell)).toContain(idx(4, 0, 2));
+    expect(first.every((c) => c.boneCell !== idx(4, 1, 0))).toBe(true);
+    for (const w of [...state.walkers]) finishWalker(state, w);
+    expect(state.bones.get(idx(4, 1, 0))!.count).toBe(2);
+
+    playOut(state);
+    expect(isWon(state)).toBe(true);
+    expect(bonesRemaining(state)).toBe(0);
+    expect(dogsRemaining(state)).toBe(0);
   });
 });
