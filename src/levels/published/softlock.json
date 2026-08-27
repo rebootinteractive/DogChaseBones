@@ -1,0 +1,114 @@
+{
+  "id": "custom-d1af2496-02b4-4714-bdaf-78acab91ac0d",
+  "meta": {
+    "cols": 7,
+    "rows": 5,
+    "schema": 1,
+    "timeLimit": 120
+  },
+  "name": "SoftLock",
+  "elements": [
+    {
+      "x": 0,
+      "y": 2,
+      "type": "wall"
+    },
+    {
+      "x": 3,
+      "y": 2,
+      "type": "wall"
+    },
+    {
+      "x": 4,
+      "y": 2,
+      "type": "wall"
+    },
+    {
+      "x": 2,
+      "y": 2,
+      "type": "wall"
+    },
+    {
+      "x": 0,
+      "y": 4,
+      "type": "wall"
+    },
+    {
+      "x": 3,
+      "y": 3,
+      "type": "wall"
+    },
+    {
+      "x": 5,
+      "y": 0,
+      "type": "wall"
+    },
+    {
+      "x": 4,
+      "y": 1,
+      "type": "wall"
+    },
+    {
+      "x": 4,
+      "y": 0,
+      "type": "wall"
+    },
+    {
+      "x": 1,
+      "y": 3,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 2,
+      "y": 3,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 0,
+      "y": 3,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "type": "block",
+      "group": "g3"
+    },
+    {
+      "x": 2,
+      "y": 3,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "dir": "up",
+      "type": "queue",
+      "count": 1
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "dir": "right",
+      "type": "queue",
+      "count": 1
+    }
+  ],
+  "prototype": "dog-chase-bones"
+}

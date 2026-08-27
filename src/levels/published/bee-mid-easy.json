@@ -1,0 +1,143 @@
+{
+  "id": "b3-sealed-room",
+  "meta": {
+    "cols": 6,
+    "rows": 6,
+    "schema": 1,
+    "timeLimit": 150
+  },
+  "name": "Bee-Mid/Easy",
+  "elements": [
+    {
+      "x": 0,
+      "y": 2,
+      "type": "wall"
+    },
+    {
+      "x": 4,
+      "y": 2,
+      "type": "wall"
+    },
+    {
+      "x": 5,
+      "y": 2,
+      "type": "wall"
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "type": "bee"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "type": "block",
+      "group": "a"
+    },
+    {
+      "x": 3,
+      "y": 0,
+      "type": "block",
+      "group": "a"
+    },
+    {
+      "x": 4,
+      "y": 1,
+      "type": "block",
+      "group": "p"
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 4,
+      "y": 4,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 4,
+      "y": 5,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 0,
+      "y": 3,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 1,
+      "y": 3,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 1,
+      "y": 4,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 5,
+      "y": 0,
+      "type": "block",
+      "group": "g3"
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "type": "block",
+      "group": "g3"
+    },
+    {
+      "x": 3,
+      "y": 0,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 0,
+      "y": 3,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 5,
+      "y": 0,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "dir": "up",
+      "type": "queue",
+      "count": 2
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "dir": "down",
+      "type": "queue",
+      "count": 2
+    }
+  ],
+  "prototype": "dog-chase-bones"
+}

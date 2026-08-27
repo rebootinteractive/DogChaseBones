@@ -1,0 +1,247 @@
+{
+  "id": "custom-7c2f55c0-9193-4cf0-ae5d-9988276f9da5",
+  "meta": {
+    "cols": 6,
+    "rows": 7,
+    "schema": 1,
+    "timeLimit": 120
+  },
+  "name": "MultipleBones",
+  "elements": [
+    {
+      "x": 0,
+      "y": 3,
+      "type": "wall"
+    },
+    {
+      "x": 1,
+      "y": 3,
+      "type": "wall"
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "type": "wall"
+    },
+    {
+      "x": 5,
+      "y": 3,
+      "type": "wall"
+    },
+    {
+      "x": 3,
+      "y": 1,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 4,
+      "y": 1,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 5,
+      "y": 2,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 0,
+      "y": 4,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 1,
+      "y": 4,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 3,
+      "y": 4,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "type": "block",
+      "group": "g2"
+    },
+    {
+      "x": 1,
+      "y": 6,
+      "type": "block",
+      "group": "g3"
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "type": "block",
+      "group": "g3"
+    },
+    {
+      "x": 3,
+      "y": 6,
+      "type": "block",
+      "group": "g3"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "type": "block",
+      "group": "g4"
+    },
+    {
+      "x": 2,
+      "y": 2,
+      "type": "block",
+      "group": "g4"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "type": "block",
+      "group": "g5"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "type": "block",
+      "group": "g5"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "type": "block",
+      "group": "g5"
+    },
+    {
+      "x": 0,
+      "y": 2,
+      "type": "block",
+      "group": "g6"
+    },
+    {
+      "x": 1,
+      "y": 2,
+      "type": "block",
+      "group": "g6"
+    },
+    {
+      "x": 3,
+      "y": 2,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 1,
+      "y": 5,
+      "type": "block",
+      "group": "g3"
+    },
+    {
+      "x": 2,
+      "y": 5,
+      "type": "block",
+      "group": "g7"
+    },
+    {
+      "x": 5,
+      "y": 4,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 5,
+      "y": 6,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "type": "block",
+      "group": "g1"
+    },
+    {
+      "x": 5,
+      "y": 2,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "type": "bone",
+      "count": 4
+    },
+    {
+      "x": 2,
+      "y": 5,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 1,
+      "y": 6,
+      "type": "bone",
+      "count": 1
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "dir": "up",
+      "type": "queue",
+      "count": 3
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "dir": "down",
+      "type": "queue",
+      "count": 1
+    },
+    {
+      "x": 5,
+      "y": 4,
+      "dir": "right",
+      "type": "queue",
+      "count": 2
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "dir": "left",
+      "type": "queue",
+      "count": 2
+    }
+  ],
+  "prototype": "dog-chase-bones"
+}
