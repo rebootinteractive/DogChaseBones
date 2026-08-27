@@ -8,6 +8,7 @@ import { SETTINGS } from '../game/settings';
 import { DIRS, DIR_VEC, colOf, idx, rowOf } from '../game/cells';
 import type { Dir } from '../game/cells';
 import { MAX_DIM, MIN_DIM, SCHEMA_VERSION, parseLevel } from '../game/level';
+import type { BoneStack } from '../game/level';
 import { boundaryDirs } from '../game/board';
 import { validateLevel } from '../game/validate';
 import { cellAt, cellCenter, colRowCenter, computeEditorCamera, toCellDelta } from '../game/camera';
@@ -41,7 +42,7 @@ interface MoveDrag {
   /** The group's cells before the drag started. */
   cells: number[];
   /** Bone counts on those cells, so stacks travel with their units. */
-  bones: Map<number, number>;
+  bones: Map<number, BoneStack>;
   originX: number;
   originY: number;
   dc: number;
@@ -88,8 +89,8 @@ export class EditorApp {
   private walls = new Set<number>();
   private bees = new Set<number>();
   private units = new Map<number, string>();   // cell -> group id
-  /** cell -> how many bones ride the unit there. */
-  private bones = new Map<number, number>();
+  /** cell -> the bone stack on that cell. */
+  private bones = new Map<number, BoneStack>();
   private queues: EditorQueue[] = [];
 
   private groups: string[] = ['g1'];
@@ -141,7 +142,9 @@ export class EditorApp {
         case 'bee': this.bees.add(cell); break;
         case 'bone': {
           const add = Math.max(1, Math.round(Number(el.count) || 1));
-          this.bones.set(cell, Math.min(MAX_BONES_PER_UNIT, (this.bones.get(cell) ?? 0) + add));
+          const have = this.bones.get(cell);
+          if (have) have.count = Math.min(MAX_BONES_PER_UNIT, have.count + add);
+          else this.bones.set(cell, { count: Math.min(MAX_BONES_PER_UNIT, add), order: 1 });
           break;
         }
         case 'block': {
@@ -318,7 +321,7 @@ export class EditorApp {
     const cells = componentAt(this.placementBoard(), cell);
     this.moveDrag = {
       group, cells,
-      bones: new Map(cells.filter((c) => this.bones.has(c)).map((c) => [c, this.bones.get(c)!])),
+      bones: new Map(cells.filter((c) => this.bones.has(c)).map((c) => [c, { ...this.bones.get(c)! }])),
       originX: p.x, originY: p.y,
       dc: 0, dr: 0,
       placement: this.placementFor(cells, 0, 0),
@@ -379,14 +382,16 @@ export class EditorApp {
 
   private applyBone(cell: number, remove: boolean) {
     if (!this.units.has(cell)) { this.flash('Bones ride block units — put a block here first.'); return; }
-    const have = this.bones.get(cell) ?? 0;
+    const have = this.bones.get(cell);
 
     if (remove) {
-      if (have <= 1) this.bones.delete(cell); else this.bones.set(cell, have - 1);
+      if (!have || have.count <= 1) this.bones.delete(cell);
+      else have.count -= 1;
       return;
     }
-    if (have >= MAX_BONES_PER_UNIT) { this.flash(`One unit carries at most ${MAX_BONES_PER_UNIT} bones.`); return; }
-    this.bones.set(cell, have + 1);
+    if (!have) { this.bones.set(cell, { count: 1, order: 1 }); return; }
+    if (have.count >= MAX_BONES_PER_UNIT) { this.flash(`One unit carries at most ${MAX_BONES_PER_UNIT} bones.`); return; }
+    have.count += 1;
   }
 
   private toggleTerrain(set: Set<number>, cell: number) {
@@ -461,10 +466,10 @@ export class EditorApp {
     for (const [group, cells] of byGroup) {
       drawBlockGroup(this.boardG, this.cam, cells, this.tintFor(group));
     }
-    for (const [cell, count] of this.bones) {
+    for (const [cell, stack] of this.bones) {
       if (dragging && dragging.cells.includes(cell)) continue;
       const p = cellCenter(this.cam, cell);
-      this.paintBone(p.x, p.y, count);
+      this.paintBone(p.x, p.y, stack.count);
     }
     for (const cell of this.bees) {
       const p = cellCenter(this.cam, cell);
@@ -500,7 +505,7 @@ export class EditorApp {
         const carried = drag.bones.get(drag.cells[i]);
         if (target < 0 || carried === undefined) continue;
         const p = cellCenter(this.cam, target);
-        this.paintBone(p.x, p.y, carried);
+        this.paintBone(p.x, p.y, carried.count);
       }
     }
   }
@@ -572,7 +577,7 @@ export class EditorApp {
     for (const cell of this.walls) push('wall', cell);
     for (const cell of this.bees) push('bee', cell);
     for (const [cell, group] of this.units) push('block', cell, { group });
-    for (const [cell, count] of this.bones) push('bone', cell, { count });
+    for (const [cell, stack] of this.bones) push('bone', cell, { count: stack.count });
     for (const q of this.queues) push('queue', q.cell, { dir: q.dir, count: q.count });
 
     return {

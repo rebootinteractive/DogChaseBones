@@ -1,11 +1,9 @@
 import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
 import type { Dir } from './cells';
-import type { LevelSpec } from './level';
+import type { BoneStack, LevelSpec } from './level';
 
 export interface Unit {
   group: string;
-  /** Bones still riding this unit. It is destroyed when this reaches zero. */
-  bones: number;
   colorKey?: string;
 }
 
@@ -34,6 +32,8 @@ export interface BoardState {
   walls: Set<number>;
   bees: Set<number>;
   units: Map<number, Unit>;
+  /** Every bone by cell, riding a block or sitting on the grid. */
+  bones: Map<number, BoneStack>;
   groups: Map<string, Set<number>>;
   queues: RuntimeQueue[];
   walkers: Walker[];
@@ -51,7 +51,7 @@ export function createBoard(spec: LevelSpec): BoardState {
   const units = new Map<number, Unit>();
   const authored = new Map<string, Set<number>>();
   for (const u of spec.units) {
-    const unit: Unit = { group: u.group, bones: u.bones };
+    const unit: Unit = { group: u.group };
     if (u.colorKey !== undefined) unit.colorKey = u.colorKey;
     units.set(u.cell, unit);
     let set = authored.get(u.group);
@@ -77,6 +77,7 @@ export function createBoard(spec: LevelSpec): BoardState {
     walls: new Set(spec.walls),
     bees: new Set(spec.bees),
     units,
+    bones: new Map([...spec.bones].map(([cell, s]) => [cell, { ...s }])),
     groups,
     queues: spec.queues.map((q) => ({ id: q.id, cell: q.cell, dir: q.dir, remaining: q.count })),
     walkers: [],
@@ -196,9 +197,36 @@ export function islands(spec: { cols: number; rows: number; dead: Set<number> })
   return connectedComponents(spec.cols, spec.rows, live);
 }
 
+/**
+ * Take one bone off a cell. The single place a bone can disappear, which is
+ * what keeps `activeOrder` honest. When the stack empties, the block unit
+ * underneath -- if there is one -- goes with it and its group re-splits.
+ */
+export function takeBone(
+  state: BoardState,
+  cell: number,
+): { bonesLeft: number; destroyed: boolean; groups: string[] } {
+  const stack = state.bones.get(cell);
+  if (!stack) return { bonesLeft: 0, destroyed: false, groups: [] };
+
+  const group = state.units.get(cell)?.group;
+
+  stack.count -= 1;
+  if (stack.count > 0) {
+    return { bonesLeft: stack.count, destroyed: false, groups: group ? [group] : [] };
+  }
+
+  state.bones.delete(cell);
+  if (group === undefined) return { bonesLeft: 0, destroyed: false, groups: [] };
+
+  // The host goes with its last bone -- and if it was the one thing holding its
+  // group together, `removeUnit` reports the groups it fell apart into.
+  return { bonesLeft: 0, destroyed: true, groups: removeUnit(state, cell) };
+}
+
 export function bonesRemaining(state: BoardState): number {
   let n = 0;
-  for (const u of state.units.values()) n += u.bones;
+  for (const stack of state.bones.values()) n += stack.count;
   return n;
 }
 

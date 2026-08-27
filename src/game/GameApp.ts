@@ -287,17 +287,16 @@ export class GameApp {
     for (const [group, cells] of this.state.groups) {
       drawBlockGroup(this.boardG, this.cam, cells, this.drag?.group === group ? C.blockHeld : C.block);
     }
-    for (const [cell, unit] of this.state.units) {
-      if (unit.bones <= 0) continue;
+    for (const [cell, stack] of this.state.bones) {
       const p = cellCenter(this.cam, cell);
       drawBone(this.boardG, p.x, p.y, this.cam.cell);
-      // A unit can carry a stack; it survives until the last bone is eaten.
-      if (unit.bones > 1) {
+      // A cell can carry a stack; it survives until the last bone is eaten.
+      if (stack.count > 1) {
         const r = this.cam.cell * 0.21;
         const px = p.x + this.cam.cell * 0.29;
         const py = p.y + this.cam.cell * 0.29;
         drawBonePip(this.boardG, px, py, r);
-        this.boneCounts.add(px, py, String(unit.bones), r / 9);
+        this.boneCounts.add(px, py, String(stack.count), r / 9);
       }
     }
     for (const cell of this.state.bees) {

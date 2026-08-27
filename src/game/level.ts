@@ -37,11 +37,16 @@ export const DEFAULT_TIME_LIMIT = 120;
 export const MIN_DIM = 2;
 export const MAX_DIM = 14;
 
+/** A stack of bones on one cell. Every bone in the stack shares a tier. */
+export interface BoneStack {
+  count: number;
+  /** Activation tier. Tier N is edible once every lower tier is eaten. */
+  order: number;
+}
+
 export interface BlockUnit {
   cell: number;
   group: string;
-  /** How many bones ride this unit. The unit survives until the last one goes. */
-  bones: number;
   /** Dormant in v1 -- reserved for colour-matched dogs and bones. */
   colorKey?: string;
 }
@@ -63,6 +68,8 @@ export interface LevelSpec {
   walls: Set<number>;
   bees: Set<number>;
   units: BlockUnit[];
+  /** Every bone on the board, riding a block or sitting on the grid. */
+  bones: Map<number, BoneStack>;
   queues: QueueSpec[];
 }
 
@@ -95,7 +102,7 @@ export function parseLevel(level: LevelData): ParseResult {
 
   const spec: LevelSpec = {
     schema, cols, rows, timeLimit,
-    dead: new Set(), walls: new Set(), bees: new Set(), units: [], queues: [],
+    dead: new Set(), walls: new Set(), bees: new Set(), units: [], bones: new Map(), queues: [],
   };
   const issues: string[] = [];
 
@@ -108,7 +115,6 @@ export function parseLevel(level: LevelData): ParseResult {
 
   // One occupant per cell: dead / wall / bee / block are mutually exclusive.
   const occupant = new Map<number, string>();
-  const unitAt = new Map<number, BlockUnit>();
   const bones: Array<{ cell: number; count: number }> = [];
   let queueSeq = 0;
 
@@ -155,10 +161,9 @@ export function parseLevel(level: LevelData): ParseResult {
       case 'bee': spec.bees.add(cell); occupant.set(cell, 'bee'); break;
       case 'block': {
         const group = typeof el.group === 'string' && el.group ? el.group : `g-${cell}`;
-        const unit: BlockUnit = { cell, group, bones: 0 };
+        const unit: BlockUnit = { cell, group };
         if (typeof el.colorKey === 'string') unit.colorKey = el.colorKey;
         spec.units.push(unit);
-        unitAt.set(cell, unit);
         occupant.set(cell, 'block');
         break;
       }
@@ -167,19 +172,27 @@ export function parseLevel(level: LevelData): ParseResult {
     }
   }
 
-  // Bones ride block units. A bone with no host is not representable at runtime.
+  // Bones ride block units. A bone with no host is not representable yet --
+  // free-standing bones arrive as their own element type.
+  const blockCells = new Set(spec.units.map((u) => u.cell));
   for (const { cell, count } of bones) {
-    const host = unitAt.get(cell);
-    if (!host) { issues.push(`bone at cell ${cell} dropped -- no block unit to ride`); continue; }
-    host.bones += count;
+    if (!blockCells.has(cell)) {
+      issues.push(`bone at cell ${cell} dropped -- no block unit to ride`);
+      continue;
+    }
+    const have = spec.bones.get(cell);
+    if (have) have.count += count;
+    else spec.bones.set(cell, { count, order: 1 });
   }
 
   return { spec, issues };
 }
 
-/** Total bones on the board, counting a stacked unit once per bone. */
+/** Total bones on the board, counting a stacked cell once per bone. */
 export function countBones(spec: LevelSpec): number {
-  return spec.units.reduce((n, u) => n + u.bones, 0);
+  let n = 0;
+  for (const stack of spec.bones.values()) n += stack.count;
+  return n;
 }
 
 export function countDogs(spec: LevelSpec): number {

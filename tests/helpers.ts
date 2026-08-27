@@ -60,7 +60,7 @@ export function toAscii(state: BoardState): string[] {
     for (let c = 0; c < state.cols; c++) {
       const i = r * state.cols + c;
       const unit = state.units.get(i);
-      if (unit) line += unit.bones > 0 ? unit.group.toUpperCase()[0] : unit.group[0];
+      if (unit) line += state.bones.has(i) ? unit.group.toUpperCase()[0] : unit.group[0];
       else if (state.dead.has(i)) line += 'X';
       else if (state.walls.has(i)) line += '#';
       else if (state.bees.has(i)) line += '*';

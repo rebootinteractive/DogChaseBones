@@ -68,9 +68,7 @@ export function findRoute(
 
   // A bone parked on the entry cell is right under the leader's nose. It eats
   // from where it stands, without stepping onto the board -- an empty route.
-  // No cells are walked, so there is nothing for a bee to poison.
-  const atEntry = state.units.get(entry);
-  if (atEntry && free(atEntry, entry, claimedBones) > 0) return { path: [], boneCell: entry };
+  if (free(state, entry, claimedBones) > 0) return { path: [], boneCell: entry };
 
   if (!isPassable(state, entry) || bees.has(entry)) return null;
 
@@ -97,11 +95,13 @@ export function findRoute(
 }
 
 /**
- * How many of this unit's bones nobody has set off for yet. A unit can carry a
+ * How many bones on this cell nobody has set off for yet. A cell can carry a
  * stack, so several dogs may be walking towards the same cell at once.
  */
-function free(unit: { bones: number }, cell: number, claimed: BoneClaims): number {
-  return unit.bones - (claimed.get(cell) ?? 0);
+function free(state: BoardState, cell: number, claimed: BoneClaims): number {
+  const stack = state.bones.get(cell);
+  if (!stack) return 0;
+  return stack.count - (claimed.get(cell) ?? 0);
 }
 
 /** First unspoken-for bone orthogonally touching `cell`, scanned in DIRS order. */
@@ -114,8 +114,7 @@ function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims): num
     const nr = r + dr;
     if (!inBounds(state.cols, state.rows, nc, nr)) continue;
     const n = idx(state.cols, nc, nr);
-    const unit = state.units.get(n);
-    if (unit && free(unit, n, claimed) > 0) return n;
+    if (free(state, n, claimed) > 0) return n;
   }
   return null;
 }

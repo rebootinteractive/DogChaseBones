@@ -137,7 +137,7 @@ describe('eating off the queue', () => {
 describe('a unit carrying several bones', () => {
   const stacked = (bones: number, dogs: number) => {
     const b = boardFromAscii(['A...', '....'], [{ c: 0, r: 1, dir: 'left', count: dogs }]);
-    b.units.get(0)!.bones = bones;
+    b.bones.set(0, { count: bones, order: 1 });
     return b;
   };
 
@@ -147,7 +147,7 @@ describe('a unit carrying several bones', () => {
     const first = finishWalker(b, b.walkers[0]);
     expect(first).toMatchObject({ bonesLeft: 2, destroyed: false });
     expect(b.units.has(0)).toBe(true);
-    expect(b.units.get(0)!.bones).toBe(2);
+    expect(b.bones.get(0)!.count).toBe(2);
   });
 
   it('is destroyed only when the last bone goes', () => {
@@ -165,7 +165,7 @@ describe('a unit carrying several bones', () => {
 
   it('only splits its group on the last bone', () => {
     const b = boardFromAscii(['aAa.', '....', '####'], [{ c: 3, r: 0, dir: 'up', count: 2 }]);
-    b.units.get(1)!.bones = 2;
+    b.bones.set(1, { count: 2, order: 1 });
 
     resolveMoves(b);
     expect(finishWalker(b, b.walkers[0]).groups).toEqual(['a']);
@@ -180,7 +180,7 @@ describe('a unit carrying several bones', () => {
       { c: 0, r: 0, dir: 'up', count: 1 },
       { c: 3, r: 0, dir: 'up', count: 1 },
     ]);
-    b.units.get(1)!.bones = 2;
+    b.bones.set(1, { count: 2, order: 1 });
     const out = resolveMoves(b);
     expect(out).toHaveLength(2);
     expect(out.every((c) => c.boneCell === 1)).toBe(true);
@@ -191,7 +191,7 @@ describe('a unit carrying several bones', () => {
       { c: 0, r: 0, dir: 'up', count: 1 },
       { c: 3, r: 0, dir: 'up', count: 1 },
     ]);
-    expect(b.units.get(1)!.bones).toBe(1);
+    expect(b.bones.get(1)!.count).toBe(1);
     expect(resolveMoves(b)).toHaveLength(1);
   });
 
@@ -237,7 +237,7 @@ describe('the bone a dog has committed to', () => {
       { c: 0, r: 0, dir: 'up', count: 1 },
       { c: 3, r: 0, dir: 'up', count: 1 },
     ]);
-    b.units.get(1)!.bones = 2;
+    b.bones.set(1, { count: 2, order: 1 });
     resolveMoves(b);
     expect(b.walkers).toHaveLength(2);
 

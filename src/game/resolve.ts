@@ -1,4 +1,4 @@
-import { removeUnit } from './board';
+import { takeBone } from './board';
 import type { BoardState, Walker } from './board';
 import { beeReach, findRoute } from './pathing';
 
@@ -88,16 +88,8 @@ export function finishWalker(state: BoardState, walker: Walker): EatResult {
   state.walkers = state.walkers.filter((w) => w !== walker);
   syncReserved(state);
 
-  const unit = state.units.get(walker.boneCell);
-  if (!unit) return { groups: [], boneCell: walker.boneCell, bonesLeft: 0, destroyed: false };
-
-  unit.bones = Math.max(0, unit.bones - 1);
-  if (unit.bones > 0) {
-    return { groups: [unit.group], boneCell: walker.boneCell, bonesLeft: unit.bones, destroyed: false };
-  }
-
-  const groups = removeUnit(state, walker.boneCell);
-  return { groups, boneCell: walker.boneCell, bonesLeft: 0, destroyed: true };
+  const { bonesLeft, destroyed, groups } = takeBone(state, walker.boneCell);
+  return { groups, boneCell: walker.boneCell, bonesLeft, destroyed };
 }
 
 export function isWon(state: BoardState): boolean {

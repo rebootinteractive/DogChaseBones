@@ -31,7 +31,7 @@ describe('parseLevel', () => {
   it('attaches a bone to the unit sharing its cell', () => {
     const { spec } = parseLevel(levelFromAscii(['aA..', '....']));
     expect(countBones(spec)).toBe(1);
-    expect(spec.units.find((u) => u.bones > 0)!.cell).toBe(1);
+    expect(spec.bones.get(1)).toEqual({ count: 1, order: 1 });
   });
 
   it('drops an orphan bone and says so', () => {
@@ -81,14 +81,14 @@ describe('stacked bones', () => {
   ], { cols: 4, rows: 4 })).spec;
 
   it('reads a count off the bone element', () => {
-    expect(stack(3).units[0].bones).toBe(3);
+    expect(stack(3).bones.get(0)!.count).toBe(3);
     expect(countBones(stack(3))).toBe(3);
   });
 
   it('defaults to one and never goes below it', () => {
-    expect(stack(undefined).units[0].bones).toBe(1);
-    expect(stack(0).units[0].bones).toBe(1);
-    expect(stack(-4).units[0].bones).toBe(1);
+    expect(stack(undefined).bones.get(0)!.count).toBe(1);
+    expect(stack(0).bones.get(0)!.count).toBe(1);
+    expect(stack(-4).bones.get(0)!.count).toBe(1);
   });
 
   it('adds up repeated bone elements on one cell', () => {
@@ -97,7 +97,7 @@ describe('stacked bones', () => {
       { type: 'bone', x: 0, y: 0 },
       { type: 'bone', x: 0, y: 0, count: 2 },
     ], { cols: 4, rows: 4 }));
-    expect(spec.units[0].bones).toBe(3);
+    expect(spec.bones.get(0)!.count).toBe(3);
   });
 
   it('counts a stack once per bone when weighing dogs against bones', () => {
