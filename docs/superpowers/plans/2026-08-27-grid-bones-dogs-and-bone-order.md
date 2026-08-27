@@ -593,18 +593,26 @@ import { findRoute } from '../src/game/pathing';
 describe('bone tiers', () => {
   const noClaims = new Map<number, number>();
 
-  it('will not route to a locked tier even when it is adjacent', () => {
-    const b = boardFromAscii(['.A..', '####'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
+  it('walks past a locked tier to reach the active one', () => {
+    // Cell 1 (tier 2) sits right beside the entry; cell 5 (tier 1) is a step
+    // further. The dog must ignore the near bone and take the far one.
+    const b = boardFromAscii(['.A..', '.B..'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
     b.bones.get(1)!.order = 2;
-    b.bones.set(2, { count: 1, order: 1 });   // a tier-1 bone elsewhere keeps 2 locked
-    b.units.set(2, { group: 'z' });
-    b.groups.set('z', new Set([2]));
-    expect(findRoute(b, b.queues[0], new Set(), noClaims)!.boneCell).toBe(2);
+    expect(b.bones.get(5)!.order).toBe(1);
+    const route = findRoute(b, b.queues[0], new Set(), noClaims)!;
+    expect(route.boneCell).toBe(5);
+    expect(route.path).toEqual([0, 4]);
   });
 
   it('unlocks the next tier once the lower one is gone', () => {
-    const b = boardFromAscii(['.A..', '####'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
+    // The same board with the tier-1 bone eaten: tier 2 is now the lowest tier
+    // left, so it is the active one. A tier is locked relative to what remains,
+    // not to the number 1.
+    const b = boardFromAscii(['.A..', '.B..'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
     b.bones.get(1)!.order = 2;
+    b.bones.delete(5);
+    b.units.delete(5);
+    b.groups.delete('b');
     expect(findRoute(b, b.queues[0], new Set(), noClaims)!.boneCell).toBe(1);
   });
 });
@@ -2283,10 +2291,11 @@ it('sl-tiers -- a level whose tiers force a sequence', () => {
     ['..2.', '....', '..1.'],
   );
   const result = analyze(level);
+  // Record what the analyzer actually finds, for BOTH of these. If the level
+  // turns out unwinnable, or it reports soft locks, change the expected values
+  // to the real ones and document the finding in docs/soft-locks.md -- do not
+  // weaken the level until it passes.
   expect(result.winnable).toBe(true);
-  // Record what the analyzer actually finds. If it reports a soft lock, keep
-  // the assertion and document the lock in docs/soft-locks.md -- do not weaken
-  // the level until it passes.
   expect(result.dead.size).toBe(0);
 });
 ```
