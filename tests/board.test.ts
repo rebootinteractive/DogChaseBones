@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boundaryDirs, bonesRemaining, dogsRemaining, islands, removeUnit, takeBone } from '../src/game/board';
+import { boundaryDirs, bonesRemaining, dogsRemaining, islands, removeUnit, takeBone, activeOrder } from '../src/game/board';
 import { stepGroup } from '../src/game/slide';
 import { boardFromAscii, specFromAscii, toAscii } from './helpers';
 
@@ -164,5 +164,19 @@ describe('the bone map', () => {
     b.bones.set(1, { count: 1, order: 1 });
     expect(takeBone(b, 1)).toEqual({ bonesLeft: 0, destroyed: false, groups: [] });
     expect(b.bones.has(1)).toBe(false);
+  });
+});
+
+describe('activeOrder', () => {
+  it('is the lowest tier still on the board', () => {
+    const b = boardFromAscii(['aA.B', '....']);
+    b.bones.get(1)!.order = 2;
+    b.bones.get(3)!.order = 5;
+    expect(activeOrder(b)).toBe(2);
+  });
+
+  it('is null when every bone is gone', () => {
+    const b = boardFromAscii(['a...', '....']);
+    expect(activeOrder(b)).toBe(null);
   });
 });

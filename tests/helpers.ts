@@ -31,25 +31,46 @@ export function elementsFromAscii(rows: string[]): GameElement[] {
 
 export interface QueueInput { c: number; r: number; dir: Dir; count?: number }
 
-export function levelFromAscii(rows: string[], queues: QueueInput[] = [], meta: Record<string, unknown> = {}): LevelData {
+/**
+ * A parallel grid of digits giving each bone's activation tier. '.' means the
+ * default, tier 1. Kept as its own grid so the board itself stays readable.
+ */
+export type TierRows = string[];
+
+function applyTiers(els: GameElement[], tiers?: TierRows) {
+  if (!tiers) return els;
+  for (const el of els) {
+    if (el.type !== 'bone' && el.type !== 'gridBone') continue;
+    const ch = tiers[el.y as number]?.[el.x as number];
+    if (ch && ch !== '.') el.order = Number(ch);
+  }
+  return els;
+}
+
+export function levelFromAscii(
+  rows: string[],
+  queues: QueueInput[] = [],
+  meta: Record<string, unknown> = {},
+  tiers?: TierRows,
+): LevelData {
   return {
     id: 'test',
     name: 'Test',
     prototype: 'dog-chase-bones',
     elements: [
-      ...elementsFromAscii(rows),
+      ...applyTiers(elementsFromAscii(rows), tiers),
       ...queues.map((q) => ({ type: 'queue', x: q.c, y: q.r, dir: q.dir, count: q.count ?? 1 })),
     ],
     meta: { cols: rows[0].length, rows: rows.length, ...meta },
   };
 }
 
-export function boardFromAscii(rows: string[], queues: QueueInput[] = []): BoardState {
-  return createBoard(parseLevel(levelFromAscii(rows, queues)).spec);
+export function boardFromAscii(rows: string[], queues: QueueInput[] = [], tiers?: TierRows): BoardState {
+  return createBoard(parseLevel(levelFromAscii(rows, queues, {}, tiers)).spec);
 }
 
-export function specFromAscii(rows: string[], queues: QueueInput[] = []) {
-  return parseLevel(levelFromAscii(rows, queues)).spec;
+export function specFromAscii(rows: string[], queues: QueueInput[] = [], tiers?: TierRows) {
+  return parseLevel(levelFromAscii(rows, queues, {}, tiers)).spec;
 }
 
 /** Render occupancy back to ASCII so assertions can compare whole boards. */

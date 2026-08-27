@@ -1,5 +1,5 @@
 import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
-import { isPassable } from './board';
+import { activeOrder, isPassable } from './board';
 import type { BoardState, RuntimeQueue } from './board';
 
 /**
@@ -65,10 +65,13 @@ export function findRoute(
   claimedBones: BoneClaims,
 ): Route | null {
   const entry = queue.cell;
+  // Computed once: findRoute is a BFS and would otherwise recompute it per cell.
+  const order = activeOrder(state);
+  if (order === null) return null;
 
   // A bone parked on the entry cell is right under the leader's nose. It eats
   // from where it stands, without stepping onto the board -- an empty route.
-  if (free(state, entry, claimedBones) > 0) return { path: [], boneCell: entry };
+  if (free(state, entry, claimedBones, order) > 0) return { path: [], boneCell: entry };
 
   if (!isPassable(state, entry) || bees.has(entry)) return null;
 
@@ -79,7 +82,7 @@ export function findRoute(
   while (frontier.length) {
     const next: number[] = [];
     for (const cur of frontier) {
-      const bone = adjacentBone(state, cur, claimedBones);
+      const bone = adjacentBone(state, cur, claimedBones, order);
       if (bone !== null) return { path: rebuild(prev, entry, cur), boneCell: bone };
 
       for (const n of passableNeighbours(state, cur)) {
@@ -98,14 +101,16 @@ export function findRoute(
  * How many bones on this cell nobody has set off for yet. A cell can carry a
  * stack, so several dogs may be walking towards the same cell at once.
  */
-function free(state: BoardState, cell: number, claimed: BoneClaims): number {
+function free(state: BoardState, cell: number, claimed: BoneClaims, order: number | null): number {
   const stack = state.bones.get(cell);
   if (!stack) return 0;
+  // Locked tier: visible, blocking, but not claimable yet.
+  if (order === null || stack.order !== order) return 0;
   return stack.count - (claimed.get(cell) ?? 0);
 }
 
 /** First unspoken-for bone orthogonally touching `cell`, scanned in DIRS order. */
-function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims): number | null {
+function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims, order: number | null): number | null {
   const c = colOf(state.cols, cell);
   const r = rowOf(state.cols, cell);
   for (const d of DIRS) {
@@ -114,7 +119,7 @@ function adjacentBone(state: BoardState, cell: number, claimed: BoneClaims): num
     const nr = r + dr;
     if (!inBounds(state.cols, state.rows, nc, nr)) continue;
     const n = idx(state.cols, nc, nr);
-    if (free(state, n, claimed) > 0) return n;
+    if (free(state, n, claimed, order) > 0) return n;
   }
   return null;
 }

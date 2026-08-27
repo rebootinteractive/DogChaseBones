@@ -198,6 +198,23 @@ export function islands(spec: { cols: number; rows: number; dead: Set<number> })
 }
 
 /**
+ * The lowest tier still on the board -- the only tier a dog may eat from.
+ * Null when no bones remain, which is the state where the last walkers are
+ * still finishing and there is nothing left to claim.
+ *
+ * A *claimed* bone still counts as remaining, so a tier unlocks when the last
+ * lower-tier bone is eaten, not when the last one is spoken for.
+ */
+export function activeOrder(state: BoardState): number | null {
+  let lowest: number | null = null;
+  for (const stack of state.bones.values()) {
+    if (stack.count <= 0) continue;
+    if (lowest === null || stack.order < lowest) lowest = stack.order;
+  }
+  return lowest;
+}
+
+/**
  * Take one bone off a cell. The single place a bone can disappear, which is
  * what keeps `activeOrder` honest. When the stack empties, the block unit
  * underneath -- if there is one -- goes with it and its group re-splits.
