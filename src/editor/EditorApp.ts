@@ -59,6 +59,10 @@ const KEY_GROUP_SLOTS = 9;
 /** Most bones one unit may carry. Deep enough to be useful, shallow enough to read. */
 const MAX_BONES_PER_UNIT = 9;
 
+/** Dogs one queue may hold. Below the minimum a queue has no reason to exist. */
+const MIN_QUEUE_DOGS = 1;
+const MAX_QUEUE_DOGS = 20;
+
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'block', label: 'Block', hint: 'Tap cells to add them to the active group.' },
   { id: 'move', label: 'Move', hint: 'Drag a whole block group somewhere else. Red means it will not fit.' },
@@ -66,7 +70,7 @@ const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'wall', label: 'Wall', hint: 'Static, unmovable, blocks everything.' },
   { id: 'bee', label: 'Bee', hint: 'Fixed. Poisons every cell it can reach.' },
   { id: 'dead', label: 'Off', hint: 'Switch a cell off. Use these to split islands.' },
-  { id: 'queue', label: 'Queue', hint: 'Tap a boundary cell to add a queue, or tap one to select it.' },
+  { id: 'queue', label: 'Queue', hint: 'Tap a boundary cell to add a queue. Tap it again for one more dog, shift-tap for one fewer. Turn and Remove are buttons.' },
   { id: 'dog', label: 'Dog', hint: 'Tap a cell to stand a dog on the board. It blocks like a wall until it eats.' },
   { id: 'erase', label: 'Erase', hint: 'Clear whatever is in the cell.' },
 ];
@@ -249,7 +253,7 @@ export class EditorApp {
   private onMove = (e: FederatedPointerEvent) => {
     if (this.moveDrag) { this.updateMove(e); return; }
     if (!this.painting) return;
-    // Queue direction cycling would fire repeatedly under a drag; keep it to taps.
+    // The dog count would run away under a drag; keep the Queue tool to taps.
     if (this.tool === 'queue') return;
     const cell = this.cellUnder(e);
     if (cell === null || cell === this.lastPainted) return;
@@ -316,7 +320,7 @@ export class EditorApp {
       case 'wall': this.toggleTerrain(this.walls, cell); break;
       case 'bee': this.toggleTerrain(this.bees, cell); break;
       case 'dead': this.toggleDead(cell); break;
-      case 'queue': this.applyQueue(cell); break;
+      case 'queue': this.applyQueue(cell, shift); break;
       case 'dog': this.toggleDog(cell); break;
       case 'erase': this.eraseCell(cell); break;
     }
@@ -461,19 +465,26 @@ export class EditorApp {
     this.dead.add(cell);
   }
 
-  private applyQueue(cell: number) {
+  private applyQueue(cell: number, shift = false) {
     const at = this.queues.findIndex((q) => q.cell === cell);
     const valid = boundaryDirs({ cols: this.cols, rows: this.rows, dead: this.dead }, cell);
 
     if (at >= 0) {
-      // First tap selects it -- that is what exposes the dog count. Tapping the
-      // one already selected turns it. Removing is an explicit button, so a
-      // stray tap can never delete a queue you were only trying to edit.
+      // First tap selects it -- that is what exposes the dog stepper. After
+      // that, tap adds a dog and shift-tap takes one away, the same gesture the
+      // Bone tool uses for a stack. Turning is the Turn button, and removing is
+      // the Remove button, so a stray tap can never destroy a queue you were
+      // only trying to edit.
       if (this.selectedQueue !== at) { this.selectedQueue = at; return; }
+
       const q = this.queues[at];
-      const order = valid.length ? valid : [...DIRS];
-      const i = order.indexOf(q.dir);
-      q.dir = order[(i + 1) % order.length];
+      if (shift) {
+        if (q.count <= MIN_QUEUE_DOGS) { this.flash('A queue holds at least one dog — use Remove to delete it.'); return; }
+        q.count -= 1;
+        return;
+      }
+      if (q.count >= MAX_QUEUE_DOGS) { this.flash(`One queue holds at most ${MAX_QUEUE_DOGS} dogs.`); return; }
+      q.count += 1;
       return;
     }
 
@@ -797,7 +808,7 @@ export class EditorApp {
   private bumpQueue(d: number) {
     const q = this.queues[this.selectedQueue];
     if (!q) return;
-    q.count = clamp(q.count + d, 1, 20);
+    q.count = clamp(q.count + d, MIN_QUEUE_DOGS, MAX_QUEUE_DOGS);
     this.redraw();
     this.refreshChrome();
   }

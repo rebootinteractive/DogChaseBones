@@ -109,8 +109,10 @@ To change a published level: copy it down, edit, publish again.
 - **Dog**: tap a cell to stand a dog on the board. It blocks until it eats.
   A warning appears if a bee can reach it, since it could never set off.
 - **Wall / Bee / Off**: tap cells. *Off* is how you cut a level into islands.
-- **Queue**: tap a boundary cell to add one, tap it again to select it, then use
-  Turn, the dog stepper, or Remove.
+- **Queue**: tap a boundary cell to add one. Tap it again to select it, then tap
+  for one more dog and shift-tap for one fewer — the same gesture the Bone tool
+  uses for a stack. Turn and Remove stay buttons, so a stray tap cannot destroy
+  a queue you were only editing.
 - Warnings appear live and never block a save.
 
 **Keyboard (desktop):**
