@@ -13,7 +13,7 @@ here exists to stop those two quietly disagreeing.
   "prototype": "dog-chase-bones", // which game this level belongs to
   "elements": [ /* see below */ ],
   "meta": {
-    "schema": 1,                  // edition of this format — read this first
+    "schema": 2,                  // edition of this format — read this first
     "cols": 6,
     "rows": 7,
     "timeLimit": 120
@@ -31,7 +31,9 @@ screen would mean nothing.
 | `wall` | `x, y` | static, unmovable, blocks everything |
 | `bee` | `x, y` | fixed; poisons every cell it can reach |
 | `block` | `x, y, group` | one unit block painted with colour `group` |
-| `bone` | `x, y, count?` | rides the block in the same cell; `count` defaults to 1 |
+| `bone` | `x, y, count?, order?` | rides the block in the same cell; `count` defaults to 1 |
+| `gridBone` | `x, y, count?, order?` | sits on the grid itself; blocks everything until eaten |
+| `gridDog` | `x, y` | a dog standing on the board; blocks everything until it eats |
 | `queue` | `x, y, dir, count` | entry cell; dogs line up towards `dir` |
 
 `dir` is one of `up`, `right`, `down`, `left`.
@@ -39,6 +41,34 @@ screen would mean nothing.
 A **group** is a *connected run of same-coloured blocks*, not the colour itself.
 Two lumps painted the same colour but not touching are two separate groups. Any
 reader must compute connected components rather than grouping by colour.
+
+A `gridBone` owns its cell outright: it is dropped if anything else already
+holds that cell, where an ordinary `bone` is dropped if a block does *not*.
+A `gridDog` carries no count — one element is one dog, because a stack of dogs
+on one cell would have nowhere to stand.
+
+## `order` — bone tiers
+
+Every bone carries an activation tier. `order` defaults to **1**, and a bone
+with no `order` is tier 1 — which is why every level written before edition 2
+plays unchanged.
+
+A tier is edible once every **lower** tier is gone. The active tier is the
+lowest one still on the board, so tiers are relative to what remains rather
+than to the number 1: with only tiers 2 and 5 left, tier 2 is active. Gaps are
+legal and mean nothing — 1 and 3 with no 2 is simply two tiers.
+
+A **claimed** bone still counts as remaining. A tier unlocks when the last
+lower-tier bone is *eaten*, not when the last one is spoken for. Within a
+single drag release, a dog cannot set off for tier 2 while another is still
+walking to the last tier-1 bone.
+
+**One tier per cell.** A cell's whole stack shares one `order`. Repeated bone
+elements on a cell add up their `count`; the first `order` seen wins, so the
+result does not depend on element order in the file.
+
+A locked bone still blocks everything — block groups, dog routes and bee flood
+alike. It is an obstacle you can see but cannot yet claim.
 
 ## `schema` — read this before anything else
 
@@ -52,7 +82,17 @@ not be so forgiving, and a level that loads and plays **wrong** costs far more
 than one that refuses to load.
 
 Bump `SCHEMA_VERSION` in `src/game/level.ts` on any change an older reader would
-misinterpret. Levels with no `schema` field predate it and are edition 1.
+misinterpret. Levels with no `schema` field predate it and are edition 1, and
+so does a level whose `schema` is unreadable — the fallback is deliberately the
+*oldest* edition, not the current one, so a garbled field cannot suppress the
+"newer editor" warning for the one file most likely to need it.
+
+**Edition 2** added bone tiers (`order`) and the `gridBone` and `gridDog`
+elements. An edition-1 level is a valid edition-2 level with every bone on
+tier 1, which is why the reader needs no migration step. Committed level files
+are *not* expected to be the current edition — `tests/published.test.ts` checks
+each one declares an edition this build understands, not that it matches
+`SCHEMA_VERSION`.
 
 ## Where levels live — three separate places
 
