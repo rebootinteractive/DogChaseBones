@@ -61,6 +61,8 @@ const MAX_BONES_PER_UNIT = 9;
 
 /** Dogs one queue may hold. Below the minimum a queue has no reason to exist. */
 const MIN_QUEUE_DOGS = 1;
+/** A new queue starts at one dog -- tap it again to add more. */
+const NEW_QUEUE_DOGS = 1;
 const MAX_QUEUE_DOGS = 20;
 
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
@@ -490,7 +492,7 @@ export class EditorApp {
 
     if (!valid.length) { this.flash('A queue needs a side that is off-grid or switched off.'); return; }
     if (this.dead.has(cell)) { this.flash('That cell is switched off.'); return; }
-    this.queues.push({ cell, dir: valid[0], count: 3 });
+    this.queues.push({ cell, dir: valid[0], count: NEW_QUEUE_DOGS });
     this.selectedQueue = this.queues.length - 1;
   }
 
@@ -742,7 +744,7 @@ export class EditorApp {
         <div class="queue-panel">
           <span class="queue-where"></span>
           <label>Dogs
-            <span class="stepper"><button data-act="dog-">−</button><b class="dog-n">3</b><button data-act="dog+">+</button></span>
+            <span class="stepper"><button data-act="dog-">−</button><b class="dog-n">1</b><button data-act="dog+">+</button></span>
           </label>
           <button class="btn ghost small" data-act="queue-turn">Turn</button>
           <button class="btn ghost small" data-act="queue-del">Remove</button>
