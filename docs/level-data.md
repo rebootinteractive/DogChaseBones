@@ -54,24 +54,40 @@ than one that refuses to load.
 Bump `SCHEMA_VERSION` in `src/game/level.ts` on any change an older reader would
 misinterpret. Levels with no `schema` field predate it and are edition 1.
 
-## Where levels live
+## Where levels live — three separate places
 
-1. **Builtin** — `src/levels/builtin.ts`, ship in the bundle, never need network.
-2. **Published** — `src/levels/published/*.json`, committed to the repo.
-3. **Drafts** — the editor's Save, kept in that one browser's localStorage.
-4. **Supabase** — once configured, shared live with everyone.
+The menu has a tab per source, and they are **never merged**. Merging was a bug:
+a local copy replaced a same-id level from the server, so a colleague's
+published edit vanished behind an older local one with nothing on screen to say
+so. A level that exists in more than one source is now flagged, not hidden.
 
-`mergeLevels` layers them in that order: a same-id level from a later layer
-replaces one from an earlier layer in place, then the rest follow by name. That
-is how an edited baseline supersedes the original, and how a local draft shadows
-the published copy of the level you are editing.
+| tab | where | editable | deletable | who sees it |
+| --- | --- | --- | --- | --- |
+| **Local** | this browser's `localStorage` | yes | yes | only you |
+| **Repo** | `src/levels/published/*.json` | yes | yes | whoever pulls the repo |
+| **Server** | Supabase | no | no | everyone |
 
-**Drafts are always local, whether or not Supabase is configured.** `LevelStore`
-holds two backends: drafts (localStorage) and published (Supabase, or none).
-Save writes to the first, Publish to the second. They are kept apart so that
-connecting Supabase cannot silently turn a private Save into a live publish —
-Publish stays a deliberate second step, which is the authoring model the studio
-chose.
+**Repo is available only under `npm run dev`.** A browser cannot write to disk,
+so the Repo tab talks to a middleware the Vite dev server installs
+(`plugins/repoLevels.ts`, `apply: 'serve'`). The deployed build has no server, so
+the tab is simply absent there — enforcement by architecture, not by a flag.
+Everything it writes is an ordinary file: git sees it, and the designer commits,
+diffs and reverts it as usual.
+
+Filenames follow the level's *name*, so a diff is readable. A level keeps its
+file across saves, a rename moves the file rather than orphaning it, and a name
+another level already uses gets a numeric suffix. The middleware refuses any
+filename that is not a bare kebab-case `.json`, so nothing can be written
+outside the levels directory.
+
+**Server is read-only.** To revise a published level, copy it down to Local or
+Repo with the `→` button, edit it, and publish again. The copy keeps the same
+id, so publishing replaces rather than duplicates. Deleting is not possible at
+all: the key has no delete permission, deliberately.
+
+**Ids are the identity.** The same id in two tabs is the same level in two
+places — that is what the "also in" flag means. Saving in one tab never touches
+the others.
 
 ## Supabase: one project for the whole studio
 

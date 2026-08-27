@@ -47,8 +47,8 @@ multi-queue system on the grid edges.
 | `src/game/*.ts` | Pure TypeScript rules — board, slide, pathing, resolve, validate. No Pixi. |
 | `src/game/GameApp.ts` | The Pixi renderer and input. |
 | `src/editor/EditorApp.ts` | The in-game level editor. |
-| `src/levels/builtin.ts` | The three baseline levels, authored as ASCII. |
-| `src/levels/published/` | Levels published from the editor and committed here. |
+| `src/levels/published/` | Level files written by the Repo tab, under version control. |
+| `plugins/repoLevels.ts` | Dev-only middleware that lets the editor read/write those files. |
 | `docs/level-data.md` | The level format, and the rules for sharing it with Unity. |
 | `docs/soft-locks.md` | Which levels can be made unwinnable, and why bees are the only cause. |
 | `docs/supabase-schema.sql` | Run once in the shared studio project. |
@@ -65,15 +65,37 @@ Everything in `gameSettings.json` is safe to edit without touching code.
 
 ## Authoring levels
 
-Menu → **Edit** on a level, or **+ Create New Level**.
+The menu has three tabs, one per source, never merged:
 
-- **Block**: pick a group chip, then tap cells to add them to that group. Tap
-  **+ group** for a new one — two groups can sit flush and still slide apart.
-- **Bone**: tap a block unit to add a bone; shift-tap takes one off. Up to 9 per
-  unit, shown as a count. Bones cannot exist without a block under them.
+- **Local** — this browser only. Where a new level starts.
+- **Repo** — files in `src/levels/published/`, under version control. Only
+  present when running `npm run dev`, because writing files needs the dev
+  server. Commit and revert these with git as normal.
+- **Server** — Supabase, shared with everyone. Read-only.
+
+A level in more than one tab is flagged with **also in …**, so you can see your
+local copy has a server twin before you overwrite anyone.
+
+**Save** writes back to whichever tab the level came from; it never moves a
+level between tabs. **→ Local** / **→ Repo** copy one across, keeping the id so
+a later publish replaces rather than duplicates. **Publish** sends a level to
+the Server tab for everyone.
+
+To change a published level: copy it down, edit, publish again.
+
+### Editing tools
+
+- **Block**: pick a group chip, then tap cells to paint with that colour. Tap
+  **+ group** for a new one. Two *different* colours can sit flush and stay
+  independent; two lumps of the *same* colour are separate groups until you
+  paint them together.
+- **Move**: drag a whole block group somewhere else. Green means it fits, red
+  means it does not, and an invalid drop puts it back.
+- **Bone**: tap a block to add a bone; shift-tap takes one off. Up to 9 per
+  unit, shown as a count.
 - **Wall / Bee / Off**: tap cells. *Off* is how you cut a level into islands.
-- **Queue**: tap a cell whose outward side is off-grid or switched off. Tap it
-  again to turn it; set the dog count in the settings row.
+- **Queue**: tap a boundary cell to add one, tap it again to select it, then use
+  Turn, the dog stepper, or Remove.
 - Warnings appear live and never block a save.
 
 **Keyboard (desktop):**
@@ -83,22 +105,7 @@ Menu → **Edit** on a level, or **+ Create New Level**.
 | `1`–`8` | pick a tool: Block, Move, Bone, Wall, Bee, Off, Queue, Erase |
 | `⇧1`–`⇧9` | pick a paint colour, while the Block tool is up |
 
-Numbers are shown on the buttons and chips. `⇧N` creates the colours up to slot
-N if they do not exist yet, so a fresh level can jump straight to `⇧4`. Colours
-past slot 9 are chip-only. Shortcuts are ignored while you are typing in the
-name or time field.
-- **Save draft** keeps it in your browser, always — drafts never leave this
-  machine, configured backend or not. **Publish** is the deliberate second step
-  that shares a level: it uploads to Supabase when that is configured, and
-  otherwise hands you a JSON file to drop in `src/levels/published/` and commit.
-  The menu says which of the two you are in.
-
-**Download all levels** on the menu saves every level in the list as its own
-`.json`, numbered in menu order and ready to drop straight into
-`src/levels/published/`. Drafts live only in the browser that made them, so this
-is how they get into git and onto everyone else's screen. The draft flag is
-stripped on the way out. The browser asks permission for the first of a batch —
-allow it, or only one file arrives.
+**Download all** saves every level in the current tab as its own `.json`.
 
 ## Dev
 

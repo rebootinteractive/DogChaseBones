@@ -1,7 +1,9 @@
 import { Application, Container, Graphics, Rectangle } from 'pixi.js';
 import type { FederatedPointerEvent } from 'pixi.js';
 import type { GameElement, LevelData } from '../shared/types';
-import type { LevelStore } from '../levels/store';
+import type { LevelLibrary } from '../levels/library';
+import type { SourceId } from '../levels/sources/types';
+import { ServerSource } from '../levels/sources/server';
 import { SETTINGS } from '../game/settings';
 import { DIRS, DIR_VEC, colOf, idx, rowOf } from '../game/cells';
 import type { Dir } from '../game/cells';
@@ -20,7 +22,9 @@ import {
 } from '../render/draw';
 
 export interface EditorOptions {
-  store: LevelStore;
+  library: LevelLibrary;
+  /** Which source this level came from -- Save writes back to the same one. */
+  source: SourceId;
   prototype: string;
   initial?: LevelData;
   onExit: () => void;
@@ -650,7 +654,7 @@ export class EditorApp {
       <div class="editor-actions">
         <button class="btn ghost small" data-act="clear">Clear</button>
         <button class="btn small" data-act="test">▶ Test</button>
-        <button class="btn small" data-act="save">Save draft</button>
+        <button class="btn small" data-act="save">Save</button>
         <button class="btn small" data-act="publish">Publish</button>
         <button class="btn ghost small" data-act="exit">← Menu</button>
       </div>`;
@@ -696,7 +700,7 @@ export class EditorApp {
     on('test', () => this.opts.onTest(this.snapshot()));
     on('exit', () => this.opts.onExit());
     on('publish', () => this.showPublish());
-    bar.querySelector('[data-act="save"]')!.addEventListener('click', (ev) => void this.saveDraft(ev.target as HTMLButtonElement));
+    bar.querySelector('[data-act="save"]')!.addEventListener('click', (ev) => void this.saveHere(ev.target as HTMLButtonElement));
 
     this.host?.appendChild(bar);
     this.chrome = bar;
@@ -809,12 +813,20 @@ export class EditorApp {
     setTimeout(() => hint.classList.remove('flash'), 900);
   }
 
-  private async saveDraft(btn: HTMLButtonElement) {
+  /** Writes back to the source this level was opened from -- never moves it. */
+  private async saveHere(btn: HTMLButtonElement) {
+    const source = this.opts.library.get(this.opts.source);
+    const label = source?.label ?? 'level';
+    if (!source?.save) {
+      btn.textContent = `${label} is read-only`;
+      this.saveResetTimer = setTimeout(() => { btn.textContent = `Save to ${label}`; }, 1800);
+      return;
+    }
     btn.disabled = true;
     btn.textContent = 'Saving…';
-    try { await this.opts.store.saveDraft(this.snapshot()); btn.textContent = 'Saved ✓'; }
+    try { await source.save(this.snapshot()); btn.textContent = 'Saved ✓'; }
     catch (err) { btn.textContent = 'Save failed'; console.error(err); }
-    finally { this.saveResetTimer = setTimeout(() => { btn.disabled = false; btn.textContent = 'Save draft'; }, 1200); }
+    finally { this.saveResetTimer = setTimeout(() => { btn.disabled = false; btn.textContent = `Save to ${label}`; }, 1400); }
   }
 
   /**
@@ -828,7 +840,8 @@ export class EditorApp {
     const level = this.snapshot();
     const json = JSON.stringify(level, null, 2);
     const file = `${slug(this.name)}.json`;
-    const live = this.opts.store.canPublish;
+    const server = this.opts.library.get('server');
+    const live = server instanceof ServerSource && server.available;
 
     const el = document.createElement('div');
     el.className = 'modal overlay';
@@ -848,7 +861,7 @@ export class EditorApp {
         </div>
       </div>`;
     el.querySelector('.publish-note')!.textContent = live
-      ? 'This goes live for everyone on their next load. You can also commit the JSON to keep it in the repo.'
+      ? 'This goes live for everyone on their next load, in the Server tab. You can also keep a copy in the repo.'
       : `Save this as src/levels/published/${file} and commit it. It ships to everyone on the next deploy.`;
     el.querySelector('textarea')!.value = json;
 
@@ -856,7 +869,7 @@ export class EditorApp {
       const btn = ev.target as HTMLButtonElement;
       btn.disabled = true;
       btn.textContent = 'Publishing…';
-      void this.opts.store.publish(level).then(
+      void (server as ServerSource).publish(level).then(
         () => { btn.textContent = 'Published ✓'; },
         (err: unknown) => { btn.disabled = false; btn.textContent = 'Publish failed'; console.error(err); },
       );

@@ -22,31 +22,47 @@ canvas { display: block; touch-action: none; }
 .overlay-back { top: 12px; left: 12px; position: absolute; z-index: 5; }
 
 /* ------------------------------------------------------------------ menu -- */
-.menu { inset: 0; display: flex; flex-direction: column; gap: 12px; padding: 28px 20px; }
-.menu h1 { font-size: 26px; margin: 8px 0 0; }
-.menu-sub { margin: 0 0 2px; color: #8891a8; font-size: 14px; }
-.menu-status { margin: 0 0 6px; font-size: 11.5px; color: #6f7a95; line-height: 1.45; }
-.menu-status.live { color: #6cc24a; }
-.menu-status.warn { color: #ffd07a; }
+.menu { inset: 0; display: flex; flex-direction: column; gap: 10px; padding: 24px 20px 20px; }
+.menu h1 { font-size: 24px; margin: 4px 0 2px; }
+
+.tabs { display: flex; gap: 6px; }
+.tab {
+  flex: 1; appearance: none; cursor: pointer; padding: 8px 6px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
+  color: #8891a8; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.tab.active { background: #4d96ff; border-color: #4d96ff; color: #fff; }
+.tab.failed { border-color: rgba(255,107,107,.5); color: #ff9b9b; }
+.tab-count {
+  font-size: 11px; font-weight: 700; min-width: 18px; padding: 1px 5px; border-radius: 999px;
+  background: rgba(0,0,0,.22);
+}
+.tab-blurb { margin: 0; font-size: 11.5px; color: #6f7a95; line-height: 1.45; min-height: 16px; }
+
+.menu-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
+.level-row { display: flex; gap: 6px; align-items: stretch; }
+.level-card {
+  flex: 1; text-align: left; padding: 12px 14px; border: 0; border-radius: 12px;
+  background: rgba(255,255,255,.08); color: #fff; cursor: pointer;
+  display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.level-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.level-meta { font-size: 11.5px; color: #8891a8; }
+.level-ops { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+.level-ops .btn { white-space: nowrap; padding: 5px 9px; font-size: 11.5px; }
+.btn.danger { color: #ff9b9b; }
+.btn.danger:hover { background: rgba(255,107,107,.16); }
+.tag {
+  font-size: 10px; font-weight: 700; letter-spacing: .05em;
+  padding: 2px 7px; border-radius: 999px; background: rgba(255,208,122,.16); color: #ffd07a;
+}
 .menu-empty {
-  margin: 0; padding: 18px 16px; border-radius: 14px; font-size: 13.5px;
+  margin: 0; padding: 16px; border-radius: 12px; font-size: 13px;
   line-height: 1.55; color: #8891a8; background: rgba(255,255,255,.04);
 }
-.menu-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1; }
+.menu-empty.bad { color: #ff9b9b; background: rgba(255,107,107,.08); }
 .menu-actions { display: flex; flex-direction: column; gap: 8px; }
-.level-row { display: flex; gap: 8px; align-items: stretch; }
-.level-card {
-  flex: 1; text-align: left; padding: 14px 16px; border: 0; border-radius: 14px;
-  background: rgba(255,255,255,.08); color: #fff; cursor: pointer;
-  display: flex; flex-direction: column; gap: 4px;
-}
-.level-name { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.level-meta { font-size: 12px; color: #8891a8; }
-.level-edit { align-self: stretch; }
-.tag {
-  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-  padding: 2px 7px; border-radius: 999px; background: rgba(77,150,255,.18); color: #8fc0ff;
-}
 
 /* -------------------------------------------------------------- in game -- */
 .result-banner {
