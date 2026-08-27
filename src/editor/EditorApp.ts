@@ -62,7 +62,7 @@ const MAX_BONES_PER_UNIT = 9;
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'block', label: 'Block', hint: 'Tap cells to add them to the active group.' },
   { id: 'move', label: 'Move', hint: 'Drag a whole block group somewhere else. Red means it will not fit.' },
-  { id: 'bone', label: 'Bone', hint: 'Tap a block for a bone that rides it, or bare ground for one that sits on the grid. Shift-tap takes one off.' },
+  { id: 'bone', label: 'Bone', hint: 'Tap a block for a bone that rides it, or bare ground for one on the grid. Tapping a bone of another tier moves it to the selected tier; tapping one already on it adds to the stack. Shift-tap takes one off.' },
   { id: 'wall', label: 'Wall', hint: 'Static, unmovable, blocks everything.' },
   { id: 'bee', label: 'Bee', hint: 'Fixed. Poisons every cell it can reach.' },
   { id: 'dead', label: 'Off', hint: 'Switch a cell off. Use these to split islands.' },
@@ -423,6 +423,13 @@ export class EditorApp {
     }
 
     if (have) {
+      // A tap on a bone of another tier moves it to the selected tier. It does
+      // not also add a bone: retiering and stacking are different intents, and
+      // the tier chips are for the first one.
+      if (have.order !== this.activeTier) {
+        have.order = this.activeTier;
+        return;
+      }
       if (have.count >= MAX_BONES_PER_UNIT) { this.flash(`One cell carries at most ${MAX_BONES_PER_UNIT} bones.`); return; }
       have.count += 1;
       return;
@@ -511,7 +518,10 @@ export class EditorApp {
     for (const [group, cells] of byGroup) {
       drawBlockGroup(this.boardG, this.cam, cells, this.tintFor(group));
     }
-    const tiered = this.tiered();
+    // While the Bone tool is up, every bone shows its tier even on a
+    // single-tier level -- otherwise there is no way to see what you are about
+    // to retier. The game still hides badges until a level uses more than one.
+    const tiered = this.tiered() || this.tool === 'bone';
     for (const [cell, stack] of this.bones) {
       if (dragging && dragging.cells.includes(cell)) continue;
       const p = cellCenter(this.cam, cell);
@@ -863,7 +873,7 @@ export class EditorApp {
     const used = Math.max(1, ...[...this.bones.values()].map((s) => s.order), this.activeTier);
     for (let n = 1; n <= Math.min(MAX_BONE_ORDER, used + 1); n++) {
       const b = document.createElement('button');
-      b.className = 'group-chip' + (n === this.activeTier ? ' active' : '');
+      b.className = 'group-chip tier-chip' + (n === this.activeTier ? ' active' : '');
       b.textContent = `tier ${n}`;
       const key = document.createElement('i');
       key.className = 'key';
