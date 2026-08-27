@@ -159,6 +159,13 @@ describe('bone tiers', () => {
 
   it('reads tiers straight off an authored board', () => {
     const b = boardFromAscii(['aA..', '....'], [], ['.3..', '....']);
-    expect(b.bones.get(1)!.order).toBe(1);   // parseLevel ignores order until schema 2
+    expect(b.bones.get(1)!.order).toBe(3);
+  });
+
+  it('routes to a bone standing on the grid', () => {
+    const b = boardFromAscii(['..+.', '####'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
+    const route = findRoute(b, b.queues[0], new Set(), noClaims)!;
+    expect(route.boneCell).toBe(2);
+    expect(route.path).toEqual([0, 1]);
   });
 });

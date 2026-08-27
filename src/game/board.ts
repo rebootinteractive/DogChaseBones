@@ -92,6 +92,7 @@ export function isBlocked(state: BoardState, cell: number): boolean {
     state.walls.has(cell) ||
     state.bees.has(cell) ||
     state.units.has(cell) ||
+    state.bones.has(cell) ||
     state.reserved.has(cell)
   );
 }

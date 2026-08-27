@@ -5,8 +5,12 @@ import { boardFromAscii, specFromAscii, toAscii } from './helpers';
 
 describe('removeUnit', () => {
   it('splits a group when the eaten unit was the only thing holding it together', () => {
+    // Driven through takeBone, the only caller of removeUnit in the game -- it
+    // clears the bone first, so the vacated cell reads as empty rather than as
+    // a bone with nothing under it.
     const b = boardFromAscii(['aAa', '...']);
-    const groups = removeUnit(b, 1);
+    const { groups, destroyed } = takeBone(b, 1);
+    expect(destroyed).toBe(true);
     expect(groups).toHaveLength(2);
     expect(b.groups.has('a')).toBe(false);
     expect(b.units.get(0)!.group).not.toBe(b.units.get(2)!.group);

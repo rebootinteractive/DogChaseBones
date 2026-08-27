@@ -95,3 +95,18 @@ describe('slideGroupBy', () => {
     expect(slideGroupBy(b, 'a', 1, 1)).toEqual({ dc: 0, dr: 0 });
   });
 });
+
+describe('grid bones block sliding', () => {
+  it('stops a group dead', () => {
+    const b = boardFromAscii(['a.+.', '....']);
+    expect(canStepGroup(b, 'a', 1, 0)).toBe(true);
+    expect(slideGroupBy(b, 'a', 3, 0)).toEqual({ dc: 1, dr: 0 });
+  });
+
+  it('is not dragged along by a group sliding past it', () => {
+    const b = boardFromAscii(['a...', '.+..']);
+    slideGroupBy(b, 'a', 3, 0);
+    expect(b.bones.get(5)).toEqual({ count: 1, order: 1 });
+    expect(b.units.has(5)).toBe(false);
+  });
+});

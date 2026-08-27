@@ -7,6 +7,7 @@ import type { BoardState } from '../src/game/board';
 /**
  * ASCII boards keep the puzzle cases readable.
  *   '.' empty   '#' wall   'X' dead cell   '*' bee
+ *   '+' a bone sitting on the grid   '@' a dog standing on the grid
  *   'a'..'z'    a block unit of that group
  *   'A'..'Z'    the same, carrying a bone
  */
@@ -18,6 +19,8 @@ export function elementsFromAscii(rows: string[]): GameElement[] {
       if (ch === '#') { els.push({ type: 'wall', x: c, y: r }); return; }
       if (ch === 'X') { els.push({ type: 'dead', x: c, y: r }); return; }
       if (ch === '*') { els.push({ type: 'bee', x: c, y: r }); return; }
+      if (ch === '+') { els.push({ type: 'gridBone', x: c, y: r }); return; }
+      if (ch === '@') { els.push({ type: 'gridDog', x: c, y: r }); return; }
       if (/[a-zA-Z]/.test(ch)) {
         els.push({ type: 'block', x: c, y: r, group: ch.toLowerCase() });
         if (ch === ch.toUpperCase()) els.push({ type: 'bone', x: c, y: r });
@@ -82,6 +85,7 @@ export function toAscii(state: BoardState): string[] {
       const i = r * state.cols + c;
       const unit = state.units.get(i);
       if (unit) line += state.bones.has(i) ? unit.group.toUpperCase()[0] : unit.group[0];
+      else if (state.bones.has(i)) line += '+';
       else if (state.dead.has(i)) line += 'X';
       else if (state.walls.has(i)) line += '#';
       else if (state.bees.has(i)) line += '*';

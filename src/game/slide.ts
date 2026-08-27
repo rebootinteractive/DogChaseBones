@@ -27,6 +27,7 @@ export function canStepGroup(state: BoardState, group: string, dc: number, dr: n
     if (state.walls.has(target)) return false;
     if (state.bees.has(target)) return false;
     if (state.units.has(target)) return false;     // another group
+    if (state.bones.has(target)) return false;     // a bone standing on the grid
     if (state.reserved.has(target)) return false;  // a dog's locked route
   }
   return true;

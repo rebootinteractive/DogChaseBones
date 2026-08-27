@@ -23,8 +23,13 @@ describe.runIf(entries.length > 0)('committed level files', () => {
     const level = raw as LevelData;
     expect(level.prototype).toBe(PROTOTYPE);
 
+    // An edition this build understands -- not necessarily the current one.
+    // Committed levels outlive schema bumps; that is the whole point of the
+    // field, so pinning them to SCHEMA_VERSION would fail every old file.
     const meta = level.meta as Record<string, unknown> | undefined;
-    expect(meta?.schema).toBe(SCHEMA_VERSION);
+    const schema = typeof meta?.schema === 'number' ? meta.schema : 1;
+    expect(schema).toBeGreaterThanOrEqual(1);
+    expect(schema).toBeLessThanOrEqual(SCHEMA_VERSION);
 
     const { spec, issues } = parseLevel(level);
     expect(issues).toEqual([]);
