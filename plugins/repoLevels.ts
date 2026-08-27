@@ -1,4 +1,4 @@
-import { readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Plugin, ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -47,6 +47,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, dir: string) {
       return send(res, 400, { error: 'missing level' });
     }
 
+    // A fresh clone has no published/ directory until the first level is written.
+    await mkdir(dir, { recursive: true });
     await writeFile(join(dir, file), `${JSON.stringify(body.level, null, 2)}\n`, 'utf8');
 
     // A rename moves the file rather than leaving the old one orphaned.
