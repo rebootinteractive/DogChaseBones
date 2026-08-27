@@ -5,7 +5,7 @@ import { STAGE_H, STAGE_W } from '../shared/stage';
 import { SETTINGS } from './settings';
 import { parseLevel } from './level';
 import type { LevelSpec } from './level';
-import { createBoard, dogsRemaining, queueSlot, queuesOf } from './board';
+import { activeOrder, createBoard, dogsRemaining, queueSlot, queuesOf } from './board';
 import type { BoardState, RuntimeQueue, Walker } from './board';
 import { cellAt, cellCenter, colRowCenter, computeCamera, toCellDelta } from './camera';
 import type { Camera } from './camera';
@@ -14,7 +14,7 @@ import { beeReach } from './pathing';
 import { finishWalker, isWon, resolveMoves } from './resolve';
 import { LabelPool } from '../render/labels';
 import {
-  drawBadge, drawBee, drawBeeReachCell, drawBlockGroup, drawBone, drawBonePip,
+  drawBadge, drawBee, drawBeeReachCell, drawBlockGroup, drawBone, drawBonePip, drawTierBadge,
   drawCell, drawDog, drawRouteCell, drawWall,
 } from '../render/draw';
 
@@ -55,6 +55,7 @@ export class GameApp {
   private boardG = new Graphics();
   private dogG = new Graphics();
   private boneCounts = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
+  private tierLabels = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
   private hud = new Container();
 
   private spec!: LevelSpec;
@@ -88,7 +89,7 @@ export class GameApp {
     this.parent.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
 
-    this.root.addChild(this.gridG, this.overlayG, this.boardG, this.boneCounts.view, this.dogG);
+    this.root.addChild(this.gridG, this.overlayG, this.boardG, this.boneCounts.view, this.tierLabels.view, this.dogG);
     this.app.stage.addChild(this.root, this.hud);
 
     this.app.stage.eventMode = 'static';
@@ -283,20 +284,35 @@ export class GameApp {
   private drawBoard() {
     this.boardG.clear();
     this.boneCounts.begin();
+    this.tierLabels.begin();
     for (const cell of this.state.walls) drawWall(this.boardG, this.cam, cell);
     for (const [group, cells] of this.state.groups) {
       drawBlockGroup(this.boardG, this.cam, cells, this.drag?.group === group ? C.blockHeld : C.block);
     }
+    // Tier badges appear only when the level actually uses more than one tier,
+    // so a single-tier level looks exactly as it always did.
+    const tiered = new Set([...this.state.bones.values()].map((s) => s.order)).size > 1;
+    const active = activeOrder(this.state);
     for (const [cell, stack] of this.state.bones) {
       const p = cellCenter(this.cam, cell);
-      drawBone(this.boardG, p.x, p.y, this.cam.cell);
+      const locked = active !== null && stack.order !== active;
+      // A bone on a bare cell is a grid bone -- the missing block under it is
+      // the only tell it needs. A locked tier is drawn greyed: visible, still
+      // blocking, not yet claimable.
+      drawBone(this.boardG, p.x, p.y, this.cam.cell, locked);
+      const r = this.cam.cell * 0.21;
       // A cell can carry a stack; it survives until the last bone is eaten.
       if (stack.count > 1) {
-        const r = this.cam.cell * 0.21;
         const px = p.x + this.cam.cell * 0.29;
         const py = p.y + this.cam.cell * 0.29;
         drawBonePip(this.boardG, px, py, r);
         this.boneCounts.add(px, py, String(stack.count), r / 9);
+      }
+      if (tiered) {
+        const px = p.x - this.cam.cell * 0.29;
+        const py = p.y - this.cam.cell * 0.29;
+        drawTierBadge(this.boardG, px, py, r, locked);
+        this.tierLabels.add(px, py, String(stack.order), r / 9);
       }
     }
     for (const cell of this.state.bees) {
@@ -304,6 +320,7 @@ export class GameApp {
       drawBee(this.boardG, p.x, p.y, this.cam.cell);
     }
     this.boneCounts.end();
+    this.tierLabels.end();
   }
 
   private drawDogs() {
@@ -494,6 +511,7 @@ export class GameApp {
     this.anims = [];
     this.badgeLabels = [];
     this.boneCounts.destroy();
+    this.tierLabels.destroy();
     // destroys renderer, view canvas, and all stage children/graphics
     this.app.destroy({ removeView: true }, { children: true, texture: true });
   }

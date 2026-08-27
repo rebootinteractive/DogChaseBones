@@ -60,16 +60,24 @@ export function drawBlockGroup(g: Graphics, cam: Camera, cells: Set<number>, col
   }
 }
 
-export function drawBone(g: Graphics, cx: number, cy: number, size: number) {
+export function drawBone(g: Graphics, cx: number, cy: number, size: number, locked = false) {
   const len = size * L.boneScale;
   const th = len * 0.3;
   const knob = th * 0.62;
-  g.roundRect(cx - len / 2, cy - th / 2, len, th, th / 2).fill({ color: C.bone });
+  const color = locked ? C.boneLocked : C.bone;
+  g.roundRect(cx - len / 2, cy - th / 2, len, th, th / 2).fill({ color });
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      g.circle(cx + (sx * len) / 2, cy + sy * knob * 0.72, knob).fill({ color: C.bone });
+      g.circle(cx + (sx * len) / 2, cy + sy * knob * 0.72, knob).fill({ color });
     }
   }
+}
+
+/** Backing disc for a bone's activation tier, drawn opposite the count pip. */
+export function drawTierBadge(g: Graphics, cx: number, cy: number, r: number, locked: boolean) {
+  g.circle(cx, cy, r)
+    .fill({ color: C.badgeFill })
+    .stroke({ width: 1.2, color: locked ? C.boneLocked : C.bone, alpha: 0.9 });
 }
 
 export function drawBee(g: Graphics, cx: number, cy: number, size: number) {
