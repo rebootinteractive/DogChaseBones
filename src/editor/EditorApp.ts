@@ -7,7 +7,7 @@ import { ServerSource } from '../levels/sources/server';
 import { SETTINGS } from '../game/settings';
 import { DIRS, DIR_VEC, colOf, idx, rowOf } from '../game/cells';
 import type { Dir } from '../game/cells';
-import { MAX_DIM, MIN_DIM, SCHEMA_VERSION, parseLevel } from '../game/level';
+import { MAX_BONE_ORDER, MAX_DIM, MIN_DIM, SCHEMA_VERSION, parseLevel } from '../game/level';
 import type { BoneStack } from '../game/level';
 import { boundaryDirs } from '../game/board';
 import { validateLevel } from '../game/validate';
@@ -19,7 +19,7 @@ import { groupTint } from '../render/color';
 import { LabelPool } from '../render/labels';
 import {
   drawBee, drawBlockGroup, drawBone, drawBonePip, drawCell, drawDog,
-  drawPlacementCell, drawVacatedCell, drawWall,
+  drawPlacementCell, drawTierBadge, drawVacatedCell, drawWall,
 } from '../render/draw';
 
 export interface EditorOptions {
@@ -32,7 +32,7 @@ export interface EditorOptions {
   onTest: (level: LevelData) => void;
 }
 
-type Tool = 'block' | 'move' | 'bone' | 'wall' | 'bee' | 'dead' | 'queue' | 'erase';
+type Tool = 'block' | 'move' | 'bone' | 'wall' | 'bee' | 'dead' | 'queue' | 'dog' | 'erase';
 
 interface EditorQueue { cell: number; dir: Dir; count: number }
 
@@ -62,11 +62,12 @@ const MAX_BONES_PER_UNIT = 9;
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'block', label: 'Block', hint: 'Tap cells to add them to the active group.' },
   { id: 'move', label: 'Move', hint: 'Drag a whole block group somewhere else. Red means it will not fit.' },
-  { id: 'bone', label: 'Bone', hint: 'Tap a block to add a bone; shift-tap takes one off. A stacked unit survives until its last bone.' },
+  { id: 'bone', label: 'Bone', hint: 'Tap a block for a bone that rides it, or bare ground for one that sits on the grid. Shift-tap takes one off.' },
   { id: 'wall', label: 'Wall', hint: 'Static, unmovable, blocks everything.' },
   { id: 'bee', label: 'Bee', hint: 'Fixed. Poisons every cell it can reach.' },
   { id: 'dead', label: 'Off', hint: 'Switch a cell off. Use these to split islands.' },
   { id: 'queue', label: 'Queue', hint: 'Tap a boundary cell to add a queue, or tap one to select it.' },
+  { id: 'dog', label: 'Dog', hint: 'Tap a cell to stand a dog on the board. It blocks like a wall until it eats.' },
   { id: 'erase', label: 'Erase', hint: 'Clear whatever is in the cell.' },
 ];
 
@@ -97,6 +98,9 @@ export class EditorApp {
 
   private groups: string[] = ['g1'];
   private activeGroup = 'g1';
+  /** Tier new bones join. Named activeTier so it cannot be confused with
+   *  board.ts's activeOrder(), which is the lowest tier still on a board. */
+  private activeTier = 1;
   private groupSeq = 1;
 
   private tool: Tool = 'block';
@@ -142,11 +146,16 @@ export class EditorApp {
         case 'dead': this.dead.add(cell); break;
         case 'wall': this.walls.add(cell); break;
         case 'bee': this.bees.add(cell); break;
-        case 'bone': {
+        case 'bone':
+        case 'gridBone': {
           const add = Math.max(1, Math.round(Number(el.count) || 1));
+          const rawOrder = Number(el.order);
+          const order = Number.isFinite(rawOrder)
+            ? Math.min(MAX_BONE_ORDER, Math.max(1, Math.round(rawOrder)))
+            : 1;
           const have = this.bones.get(cell);
           if (have) have.count = Math.min(MAX_BONES_PER_UNIT, have.count + add);
-          else this.bones.set(cell, { count: Math.min(MAX_BONES_PER_UNIT, add), order: 1 });
+          else this.bones.set(cell, { count: Math.min(MAX_BONES_PER_UNIT, add), order });
           break;
         }
         case 'block': {
@@ -155,6 +164,7 @@ export class EditorApp {
           seen.add(group);
           break;
         }
+        case 'gridDog': this.dogs.add(cell); break;
         case 'queue': {
           const dir = DIRS.includes(el.dir as Dir) ? (el.dir as Dir) : 'up';
           const count = Math.max(1, Math.round(Number(el.count) || 1));
@@ -175,8 +185,7 @@ export class EditorApp {
       this.activeGroup = this.groups[0];
       this.groupSeq = this.groups.reduce((n, g) => Math.max(n, Number(g.replace(/\D/g, '')) || 0), 0);
     }
-    // A bone with no block underneath is not representable at runtime; drop it.
-    for (const cell of [...this.bones.keys()]) if (!this.units.has(cell)) this.bones.delete(cell);
+    // A bone with no block underneath is a grid bone now, so nothing is dropped.
   }
 
   private async init() {
@@ -268,8 +277,9 @@ export class EditorApp {
     const n = Number(digit[1]);
 
     if (e.shiftKey) {
-      if (this.tool !== 'block') return;
-      this.selectGroupSlot(n);
+      if (this.tool === 'block') this.selectGroupSlot(n);
+      else if (this.tool === 'bone') this.activeTier = Math.min(n, MAX_BONE_ORDER);
+      else return;
     } else {
       const tool = TOOLS[n - 1];
       if (!tool) return;
@@ -305,6 +315,7 @@ export class EditorApp {
       case 'bee': this.toggleTerrain(this.bees, cell); break;
       case 'dead': this.toggleDead(cell); break;
       case 'queue': this.applyQueue(cell); break;
+      case 'dog': this.toggleDog(cell); break;
       case 'erase': this.eraseCell(cell); break;
     }
     this.redraw();
@@ -390,11 +401,19 @@ export class EditorApp {
     if (existing === this.activeGroup) { this.units.delete(cell); this.bones.delete(cell); return; }
     this.walls.delete(cell);
     this.bees.delete(cell);
+    this.dogs.delete(cell);
+    // A grid bone already here becomes a riding bone -- the bone survives.
     this.units.set(cell, this.activeGroup);   // reassigns a unit from another group
   }
 
+  private toggleDog(cell: number) {
+    if (this.dead.has(cell)) return;
+    if (this.dogs.has(cell)) { this.dogs.delete(cell); return; }
+    this.clearCell(cell);
+    this.dogs.add(cell);
+  }
+
   private applyBone(cell: number, remove: boolean) {
-    if (!this.units.has(cell)) { this.flash('Bones ride block units — put a block here first.'); return; }
     const have = this.bones.get(cell);
 
     if (remove) {
@@ -402,9 +421,21 @@ export class EditorApp {
       else have.count -= 1;
       return;
     }
-    if (!have) { this.bones.set(cell, { count: 1, order: 1 }); return; }
-    if (have.count >= MAX_BONES_PER_UNIT) { this.flash(`One unit carries at most ${MAX_BONES_PER_UNIT} bones.`); return; }
-    have.count += 1;
+
+    if (have) {
+      if (have.count >= MAX_BONES_PER_UNIT) { this.flash(`One cell carries at most ${MAX_BONES_PER_UNIT} bones.`); return; }
+      have.count += 1;
+      return;
+    }
+
+    // A bone rides a block when there is one under it, and sits on the grid
+    // when there is not. Anything else in the cell has to go first.
+    if (this.dead.has(cell)) { this.flash('That cell is switched off.'); return; }
+    if (this.walls.has(cell) || this.bees.has(cell) || this.dogs.has(cell)) {
+      this.flash('Clear the cell first — a bone needs a block or bare ground.');
+      return;
+    }
+    this.bones.set(cell, { count: 1, order: this.activeTier });
   }
 
   private toggleTerrain(set: Set<number>, cell: number) {
@@ -453,6 +484,7 @@ export class EditorApp {
   private clearCell(cell: number) {
     this.units.delete(cell);
     this.bones.delete(cell);
+    this.dogs.delete(cell);
     this.walls.delete(cell);
     this.bees.delete(cell);
   }
@@ -479,14 +511,19 @@ export class EditorApp {
     for (const [group, cells] of byGroup) {
       drawBlockGroup(this.boardG, this.cam, cells, this.tintFor(group));
     }
+    const tiered = this.tiered();
     for (const [cell, stack] of this.bones) {
       if (dragging && dragging.cells.includes(cell)) continue;
       const p = cellCenter(this.cam, cell);
-      this.paintBone(p.x, p.y, stack.count);
+      this.paintBone(p.x, p.y, stack.count, tiered ? stack.order : 0);
     }
     for (const cell of this.bees) {
       const p = cellCenter(this.cam, cell);
       drawBee(this.boardG, p.x, p.y, this.cam.cell);
+    }
+    for (const cell of this.dogs) {
+      const p = cellCenter(this.cam, cell);
+      drawDog(this.boardG, p.x, p.y, this.cam.cell * L.queueDogScale);
     }
 
     if (dragging) this.drawMoveGhost(dragging);
@@ -518,20 +555,32 @@ export class EditorApp {
         const carried = drag.bones.get(drag.cells[i]);
         if (target < 0 || carried === undefined) continue;
         const p = cellCenter(this.cam, target);
-        this.paintBone(p.x, p.y, carried.count);
+        this.paintBone(p.x, p.y, carried.count, this.tiered() ? carried.order : 0);
       }
     }
   }
 
   /** A bone, plus its count when the unit carries a stack. */
-  private paintBone(x: number, y: number, count: number) {
+  /** True when the level uses more than one tier -- badges stay off until then. */
+  private tiered(): boolean {
+    return new Set([...this.bones.values()].map((s) => s.order)).size > 1;
+  }
+
+  private paintBone(x: number, y: number, count: number, order = 0) {
     drawBone(this.boardG, x, y, this.cam.cell);
-    if (count <= 1) return;
     const r = this.cam.cell * 0.21;
-    const px = x + this.cam.cell * 0.29;
-    const py = y + this.cam.cell * 0.29;
-    drawBonePip(this.boardG, px, py, r);
-    this.boneLabels.add(px, py, String(count), r / 9);
+    if (count > 1) {
+      const px = x + this.cam.cell * 0.29;
+      const py = y + this.cam.cell * 0.29;
+      drawBonePip(this.boardG, px, py, r);
+      this.boneLabels.add(px, py, String(count), r / 9);
+    }
+    if (order > 0) {
+      const px = x - this.cam.cell * 0.29;
+      const py = y - this.cam.cell * 0.29;
+      drawTierBadge(this.boardG, px, py, r, false);
+      this.boneLabels.add(px, py, String(order), r / 9);
+    }
   }
 
   private drawQueues() {
@@ -590,7 +639,11 @@ export class EditorApp {
     for (const cell of this.walls) push('wall', cell);
     for (const cell of this.bees) push('bee', cell);
     for (const [cell, group] of this.units) push('block', cell, { group });
-    for (const [cell, stack] of this.bones) push('bone', cell, { count: stack.count });
+    for (const [cell, stack] of this.bones) {
+      // A bone rides a block when one is under it, and sits on the grid when not.
+      push(this.units.has(cell) ? 'bone' : 'gridBone', cell, { count: stack.count, order: stack.order });
+    }
+    for (const cell of this.dogs) push('gridDog', cell);
     for (const q of this.queues) push('queue', q.cell, { dir: q.dir, count: q.count });
 
     return {
@@ -626,6 +679,7 @@ export class EditorApp {
     this.walls = keys(this.walls);
     this.bees = keys(this.bees);
     this.dead = keys(this.dead);
+    this.dogs = keys(this.dogs);
     this.queues = this.queues
       .filter((q) => colOf(this.cols, q.cell) < cols && rowOf(this.cols, q.cell) < rows)
       .map((q) => ({ ...q, cell: idx(cols, colOf(this.cols, q.cell), rowOf(this.cols, q.cell)) }));
@@ -649,8 +703,9 @@ export class EditorApp {
       <div class="chrome-body">
         <div class="tool-row"></div>
         <p class="tool-hint"></p>
-        <p class="key-hint">1\u20138 pick a tool \u00b7 \u21e7 1\u20139 pick a paint colour</p>
+        <p class="key-hint">1\u20139 pick a tool \u00b7 \u21e7 1\u20139 pick a paint colour or bone tier</p>
         <div class="group-row"></div>
+        <div class="tier-row group-row"></div>
         <div class="settings-row">
           <label>Name <input class="editor-name" /></label>
           <label>Grid
@@ -752,7 +807,7 @@ export class EditorApp {
   }
 
   private clearAll() {
-    this.dead.clear(); this.walls.clear(); this.bees.clear();
+    this.dead.clear(); this.walls.clear(); this.bees.clear(); this.dogs.clear();
     this.units.clear(); this.bones.clear();
     this.queues = [];
     this.groups = ['g1'];
@@ -800,6 +855,23 @@ export class EditorApp {
       this.refreshChrome();
     };
     groupRow.appendChild(add);
+
+    // Tier chips mirror the colour chips: same class, same Shift+N gesture.
+    const tierRow = bar.querySelector<HTMLElement>('.tier-row')!;
+    tierRow.style.display = this.tool === 'bone' ? 'flex' : 'none';
+    tierRow.innerHTML = '';
+    const used = Math.max(1, ...[...this.bones.values()].map((s) => s.order), this.activeTier);
+    for (let n = 1; n <= Math.min(MAX_BONE_ORDER, used + 1); n++) {
+      const b = document.createElement('button');
+      b.className = 'group-chip' + (n === this.activeTier ? ' active' : '');
+      b.textContent = `tier ${n}`;
+      const key = document.createElement('i');
+      key.className = 'key';
+      key.textContent = `\u21e7${n}`;
+      b.appendChild(key);
+      b.onclick = () => { this.activeTier = n; this.refreshChrome(); };
+      tierRow.appendChild(b);
+    }
 
     bar.querySelector('.dim-cols')!.textContent = String(this.cols);
     bar.querySelector('.dim-rows')!.textContent = String(this.rows);
