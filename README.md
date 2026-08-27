@@ -69,6 +69,10 @@ Everything in `gameSettings.json` is safe to edit without touching code.
 - `debug.showBeeReach` — paints every cell a bee can currently reach. On by
   default; it is the only way to see *why* a dog is refusing to move.
 - `debug.showRoutes` — highlights the cells a walking dog has locked.
+- `colors.tierBadge` / `tierBadgeLocked` — the bone-tier square. It is a filled
+  square on purpose: the bone *count* is a round dark pip on the opposite
+  corner, and two dark circles were indistinguishable at cell size. Keep these
+  light enough for `colors.tierBadgeText` to read on.
 
 ## Authoring levels
 

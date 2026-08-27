@@ -78,6 +78,8 @@ export class EditorApp {
   private boardG = new Graphics();
   private overlayG = new Graphics();
   private boneLabels = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
+  /** Tier digits sit on a filled square, so they are dark where counts are white. */
+  private tierLabels = new LabelPool({ fill: C.tierBadgeText, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
   private queueLabels = new LabelPool({ fill: C.badgeText, fontSize: 11, fontFamily: 'system-ui, sans-serif' });
 
   private cols: number;
@@ -205,7 +207,7 @@ export class EditorApp {
     await this.app.init({ width: 1, height: 1, background: C.background, antialias: true });
     scene.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
-    this.root.addChild(this.gridG, this.boardG, this.overlayG, this.boneLabels.view, this.queueLabels.view);
+    this.root.addChild(this.gridG, this.boardG, this.overlayG, this.boneLabels.view, this.tierLabels.view, this.queueLabels.view);
     this.app.stage.addChild(this.root);
 
     this.app.stage.eventMode = 'static';
@@ -500,6 +502,7 @@ export class EditorApp {
 
   private redraw() {
     this.boneLabels.begin();
+    this.tierLabels.begin();
     this.queueLabels.begin();
     this.gridG.clear();
     for (let i = 0; i < this.cols * this.rows; i++) drawCell(this.gridG, this.cam, i, this.dead.has(i));
@@ -539,6 +542,7 @@ export class EditorApp {
     if (dragging) this.drawMoveGhost(dragging);
     this.drawQueues();
     this.boneLabels.end();
+    this.tierLabels.end();
     this.queueLabels.end();
   }
 
@@ -589,7 +593,7 @@ export class EditorApp {
       const px = x - this.cam.cell * 0.29;
       const py = y - this.cam.cell * 0.29;
       drawTierBadge(this.boardG, px, py, r, false);
-      this.boneLabels.add(px, py, String(order), r / 9);
+      this.tierLabels.add(px, py, String(order), r / 9);
     }
   }
 
@@ -1011,6 +1015,7 @@ export class EditorApp {
     this.units.clear();
     this.queues = [];
     this.boneLabels.destroy();
+    this.tierLabels.destroy();
     this.queueLabels.destroy();
     // destroys renderer, view canvas, and all stage children/graphics
     this.app.destroy({ removeView: true }, { children: true, texture: true });

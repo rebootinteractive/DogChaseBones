@@ -55,7 +55,7 @@ export class GameApp {
   private boardG = new Graphics();
   private dogG = new Graphics();
   private boneCounts = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
-  private tierLabels = new LabelPool({ fill: 0xffffff, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
+  private tierLabels = new LabelPool({ fill: C.tierBadgeText, fontSize: 13, fontFamily: 'system-ui, sans-serif', fontWeight: '700' });
   private hud = new Container();
 
   private spec!: LevelSpec;

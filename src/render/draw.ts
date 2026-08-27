@@ -73,11 +73,17 @@ export function drawBone(g: Graphics, cx: number, cy: number, size: number, lock
   }
 }
 
-/** Backing disc for a bone's activation tier, drawn opposite the count pip. */
+/**
+ * A bone's activation tier: a *filled square*, deliberately unlike the round,
+ * dark, bone-outlined count pip on the opposite corner. Two dark circles with a
+ * white digit in each were indistinguishable at cell size, so these differ in
+ * shape, fill and text colour at once rather than in any one of them.
+ */
 export function drawTierBadge(g: Graphics, cx: number, cy: number, r: number, locked: boolean) {
-  g.circle(cx, cy, r)
-    .fill({ color: C.badgeFill })
-    .stroke({ width: 1.2, color: locked ? C.boneLocked : C.bone, alpha: 0.9 });
+  const s = r * 1.85;
+  g.roundRect(cx - s / 2, cy - s / 2, s, s, r * 0.42)
+    .fill({ color: locked ? C.tierBadgeLocked : C.tierBadge })
+    .stroke({ width: 1.2, color: locked ? C.boneLocked : 0xffffff, alpha: 0.85 });
 }
 
 export function drawBee(g: Graphics, cx: number, cy: number, size: number) {
