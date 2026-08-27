@@ -2031,10 +2031,11 @@ placed beside the other `keys(...)` calls, then assigned with them:
 
 - [ ] **Step 3: Make the Bone tool context-sensitive and tier-aware**
 
-Add the active-tier field beside `activeGroup`:
+Add the active-tier field beside `activeGroup` (named `activeTier`, not
+`activeOrder`, so it cannot be confused with `board.ts`'s `activeOrder()`):
 
 ```ts
-  private activeOrder = 1;
+  private activeTier = 1;
 ```
 
 Rewrite `applyBone`. An empty cell is now a legal target; a cell holding a dog,
@@ -2063,7 +2064,7 @@ wall or bee is not:
       this.flash('Clear the cell first — a bone needs a block or bare ground.');
       return;
     }
-    this.bones.set(cell, { count: 1, order: this.activeOrder });
+    this.bones.set(cell, { count: 1, order: this.activeTier });
   }
 ```
 
@@ -2117,7 +2118,7 @@ In `onKeyDown`, replace the shift branch:
 ```ts
     if (e.shiftKey) {
       if (this.tool === 'block') this.selectGroupSlot(n);
-      else if (this.tool === 'bone') this.activeOrder = Math.min(n, MAX_BONE_ORDER);
+      else if (this.tool === 'bone') this.activeTier = Math.min(n, MAX_BONE_ORDER);
       else return;
     } else {
 ```
@@ -2137,17 +2138,17 @@ and in `refreshChrome`, after the group-row block:
     tierRow.style.display = this.tool === 'bone' ? 'flex' : 'none';
     tierRow.innerHTML = '';
     // Show every tier in use, plus one beyond it to grow into.
-    const used = Math.max(1, ...[...this.bones.values()].map((s) => s.order), this.activeOrder);
+    const used = Math.max(1, ...[...this.bones.values()].map((s) => s.order), this.activeTier);
     const shown = Math.min(MAX_BONE_ORDER, used + 1);
     for (let n = 1; n <= shown; n++) {
       const b = document.createElement('button');
-      b.className = 'group-chip' + (n === this.activeOrder ? ' active' : '');
+      b.className = 'group-chip' + (n === this.activeTier ? ' active' : '');
       b.textContent = `tier ${n}`;
       const key = document.createElement('i');
       key.className = 'key';
       key.textContent = `⇧${n}`;
       b.appendChild(key);
-      b.onclick = () => { this.activeOrder = n; this.refreshChrome(); };
+      b.onclick = () => { this.activeTier = n; this.refreshChrome(); };
       tierRow.appendChild(b);
     }
 ```
