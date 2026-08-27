@@ -91,6 +91,8 @@ export class EditorApp {
   private units = new Map<number, string>();   // cell -> group id
   /** cell -> the bone stack on that cell. */
   private bones = new Map<number, BoneStack>();
+  /** Cells holding a dog standing on the board. */
+  private dogs = new Set<number>();
   private queues: EditorQueue[] = [];
 
   private groups: string[] = ['g1'];
@@ -364,7 +366,18 @@ export class EditorApp {
   }
 
   private placementBoard(): PlacementBoard {
-    return { cols: this.cols, rows: this.rows, dead: this.dead, walls: this.walls, bees: this.bees, units: this.units };
+    return {
+      cols: this.cols,
+      rows: this.rows,
+      dead: this.dead,
+      walls: this.walls,
+      bees: this.bees,
+      // Only bones with no block under them obstruct: a riding bone's cell is
+      // already held by its unit, and travels with the group being dragged.
+      bones: new Set([...this.bones.keys()].filter((c) => !this.units.has(c))),
+      dogs: this.dogs,
+      units: this.units,
+    };
   }
 
   private placementFor(cells: number[], dc: number, dr: number): Placement {

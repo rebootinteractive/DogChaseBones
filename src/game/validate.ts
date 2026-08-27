@@ -1,5 +1,6 @@
-import { boundaryDirs, islands } from './board';
-import { colOf, rowOf } from './cells';
+import { boundaryDirs, createBoard, islands } from './board';
+import { beeReach } from './pathing';
+import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
 import { countBones, countDogs } from './level';
 import type { LevelSpec } from './level';
 
@@ -37,11 +38,42 @@ export function validateLevel(spec: LevelSpec): string[] {
     }
   }
 
+  // A grid dog on a queue's entry cell seals that queue in -- the third way to
+  // make a mistake the entry-cell checks above already catch for walls and bees.
+  const queueCells = new Set(spec.queues.map((q) => q.cell));
+  for (const cell of spec.gridDogs) {
+    if (queueCells.has(cell)) {
+      out.push(`Dog at ${at(cell)} stands on a queue entry cell -- that queue can never enter.`);
+    }
+  }
+
+  // A bee beside a grid dog poisons it where it stands, and it can never set
+  // off. Bee reach never *contains* the dog's cell, because that cell is not
+  // passable -- so exposure is adjacency, to a bee cell or a bee-reachable one.
+  if (spec.gridDogs.length && spec.bees.size) {
+    const reach = beeReach(createBoard(spec));
+    for (const cell of spec.gridDogs) {
+      const c = colOf(spec.cols, cell);
+      const r = rowOf(spec.cols, cell);
+      const exposed = DIRS.some((d) => {
+        const { dc, dr } = DIR_VEC[d];
+        const nc = c + dc;
+        const nr = r + dr;
+        if (!inBounds(spec.cols, spec.rows, nc, nr)) return false;
+        const n = idx(spec.cols, nc, nr);
+        return spec.bees.has(n) || reach.has(n);
+      });
+      if (exposed) out.push(`Dog at ${at(cell)} is exposed to a bee and can never set off.`);
+    }
+  }
+
   // Dogs and bones are trapped on their own island; check each one separately.
   const parts = islands(spec);
   if (parts.length > 1) {
     parts.forEach((cells, n) => {
-      const islandDogs = spec.queues.filter((q) => cells.has(q.cell)).reduce((a, q) => a + q.count, 0);
+      const islandDogs =
+        spec.queues.filter((q) => cells.has(q.cell)).reduce((a, q) => a + q.count, 0) +
+        spec.gridDogs.filter((cell) => cells.has(cell)).length;
       const islandBones = [...spec.bones]
         .reduce((n, [cell, stack]) => n + (cells.has(cell) ? stack.count : 0), 0);
       if (islandDogs === 0) return;

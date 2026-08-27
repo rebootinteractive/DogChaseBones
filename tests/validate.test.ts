@@ -45,3 +45,38 @@ describe('validateLevel', () => {
     expect(out).toBe('');
   });
 });
+
+describe('grid dogs', () => {
+  it('warns when a bee floods to a cell beside one', () => {
+    // The bee at (2,0) floods (1,0), which touches the dog at (0,0).
+    const spec = specFromAscii(['@.*.', '...+']);
+    expect(validateLevel(spec).some((w) => /exposed to a bee/.test(w))).toBe(true);
+  });
+
+  it('warns when a bee sits right beside one', () => {
+    // Adjacency to the bee cell itself. A bee's reach never contains its own
+    // cell, so this only fires if the check tests both.
+    const spec = specFromAscii(['@*..', '...+']);
+    expect(validateLevel(spec).some((w) => /exposed to a bee/.test(w))).toBe(true);
+  });
+
+  it('says nothing when the dog is sealed off from the bee', () => {
+    const spec = specFromAscii(['@#..', '##..', '..*+']);
+    expect(validateLevel(spec).some((w) => /exposed to a bee/.test(w))).toBe(false);
+  });
+
+  it('warns when one stands on a queue entry cell', () => {
+    const spec = specFromAscii(['@..+', '####'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
+    expect(validateLevel(spec).some((w) => /entry cell/.test(w))).toBe(true);
+  });
+
+  it('counts toward the dogs-versus-bones check', () => {
+    const spec = specFromAscii(['@@..', '...+']);
+    expect(validateLevel(spec).some((w) => /2 dogs but only 1 bone/.test(w))).toBe(true);
+  });
+
+  it('counts toward the per-island check', () => {
+    const spec = specFromAscii(['@...', 'XXXX', '...+']);
+    expect(validateLevel(spec).some((w) => /Island 1: 1 dogs and no bones/.test(w))).toBe(true);
+  });
+});

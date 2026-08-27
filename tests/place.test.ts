@@ -5,12 +5,18 @@ import type { PlacementBoard } from '../src/game/place';
 /** Same ASCII convention as the other suites, flattened to an editor board. */
 function board(rows: string[]): PlacementBoard {
   const cols = rows[0].length;
-  const b: PlacementBoard = { cols, rows: rows.length, dead: new Set(), walls: new Set(), bees: new Set(), units: new Map() };
+  const b: PlacementBoard = {
+    cols, rows: rows.length,
+    dead: new Set(), walls: new Set(), bees: new Set(),
+    bones: new Set(), dogs: new Set(), units: new Map(),
+  };
   rows.forEach((row, r) => [...row].forEach((ch, c) => {
     const cell = r * cols + c;
     if (ch === '#') b.walls.add(cell);
     else if (ch === 'X') b.dead.add(cell);
     else if (ch === '*') b.bees.add(cell);
+    else if (ch === '+') b.bones.add(cell);
+    else if (ch === '@') b.dogs.add(cell);
     else if (/[a-z]/.test(ch)) b.units.set(cell, ch);
   }));
   return b;
@@ -108,5 +114,14 @@ describe('two lumps sharing one colour', () => {
     const p = move(['aa.a', '....'], 'a', 0, 1);
     expect(p.ok).toBe(true);
     expect(p.targets).toEqual([4, 5]);
+  });
+});
+
+describe('grid bones and grid dogs block a drop', () => {
+  it('refuses either, and allows the bare cell between them', () => {
+    const b = board(['a.+@']);
+    expect(evaluatePlacement(b, [0], 2, 0).ok).toBe(false);   // onto the grid bone
+    expect(evaluatePlacement(b, [0], 3, 0).ok).toBe(false);   // onto the grid dog
+    expect(evaluatePlacement(b, [0], 1, 0).ok).toBe(true);
   });
 });
