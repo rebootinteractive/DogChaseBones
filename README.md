@@ -82,7 +82,8 @@ The menu has three tabs, one per source, never merged:
 - **Repo** — files in `src/levels/published/`, under version control. Only
   present when running `npm run dev`, because writing files needs the dev
   server. Commit and revert these with git as normal.
-- **Server** — Supabase, shared with everyone. Read-only.
+- **Server** — Supabase, shared with everyone. Levels here are not edited in
+  place; copy one down to change it. **Delete** removes it for everyone.
 
 A level in more than one tab is flagged with **also in …**, so you can see your
 local copy has a server twin before you overwrite anyone.
@@ -93,6 +94,10 @@ a later publish replaces rather than duplicates. **Publish** sends a level to
 the Server tab for everyone.
 
 To change a published level: copy it down, edit, publish again.
+
+**Push all to Server** on the Local or Repo tab publishes that whole tab at
+once. It tells you how many are new and names the ones it would overwrite
+before it starts.
 
 ### Editing tools
 

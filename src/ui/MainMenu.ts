@@ -3,6 +3,7 @@ import type { LevelLibrary } from '../levels/library';
 import type { SourceId } from '../levels/sources/types';
 import { countBones, countDogs, parseLevel } from '../game/level';
 import { exportFileName, exportPayload } from '../levels/exportLevel';
+import { ServerSource } from '../levels/sources/server';
 
 export interface MenuOptions {
   library: LevelLibrary;
@@ -37,6 +38,7 @@ export class MainMenu {
       <div class="menu-list">Loading…</div>
       <div class="menu-actions">
         <button class="btn" data-act="new">+ Create New Level</button>
+        <button class="btn ghost" data-act="push" hidden>Push all to Server</button>
         <button class="btn ghost" data-act="download" disabled>Download all</button>
       </div>`;
 
@@ -57,6 +59,8 @@ export class MainMenu {
     });
     this.root.querySelector('[data-act="download"]')!.addEventListener('click', (ev) =>
       this.downloadAll(ev.currentTarget as HTMLButtonElement));
+    this.root.querySelector('[data-act="push"]')!.addEventListener('click', (ev) =>
+      void this.pushAll(ev.currentTarget as HTMLButtonElement));
 
     this.parent.appendChild(this.root);
     void this.load();
@@ -91,6 +95,14 @@ export class MainMenu {
     const count = listing?.levels.length ?? 0;
     download.disabled = count === 0;
     download.textContent = count ? `Download all (${count})` : 'Download all';
+
+    // Push all is for getting a whole tab onto the server at once. It has no
+    // meaning on the Server tab itself, and none without a server configured.
+    const push = this.root.querySelector<HTMLButtonElement>('[data-act="push"]')!;
+    const canPush = this.active !== 'server' && this.server() !== null;
+    push.hidden = !canPush;
+    push.disabled = !canPush || count === 0;
+    push.textContent = count ? `Push all to Server (${count})` : 'Push all to Server';
 
     if (listing?.error) {
       list.appendChild(this.note(`Could not read ${source?.label}: ${listing.error}`, 'bad'));
@@ -189,7 +201,15 @@ export class MainMenu {
   private async remove(level: LevelData) {
     const source = this.opts.library.get(this.active);
     if (!source?.remove) return;
-    if (!confirm(`Delete "${level.name}" from ${source.label}?`)) return;
+
+    // Deleting locally costs one browser's copy; deleting on the server takes
+    // it from everyone, with no undo. Different acts deserve different warnings.
+    const elsewhere = this.opts.library.alsoIn(level.id, this.active);
+    const message = this.active === 'server'
+      ? `Delete "${level.name}" from the server?\n\nIt goes for everyone, immediately, and there is no undo.` +
+        (elsewhere.length ? `\n\nYou still have a copy in ${elsewhere.join(', ')}.` : '\n\nNo copy exists anywhere else.')
+      : `Delete "${level.name}" from ${source.label}?`;
+    if (!confirm(message)) return;
 
     try {
       await source.remove(level);
@@ -197,6 +217,68 @@ export class MainMenu {
     } catch (err) {
       alert(`Could not delete: ${describe(err)}`);
     }
+  }
+
+  private server(): ServerSource | null {
+    const source = this.opts.library.get('server');
+    return source instanceof ServerSource && source.available ? source : null;
+  }
+
+  /**
+   * Publish every level in this tab to the server in one go.
+   *
+   * Confirmed with a count, and the count separates new from updating, because
+   * those are different acts: one adds a level, the other overwrites whatever a
+   * colleague last published under that id. A publish carries the level's id, so
+   * an update replaces rather than duplicates.
+   */
+  private async pushAll(btn: HTMLButtonElement) {
+    const server = this.server();
+    const levels = this.opts.library.listing(this.active)?.levels ?? [];
+    if (!server || !levels.length) return;
+
+    const onServer = new Set((this.opts.library.listing('server')?.levels ?? []).map((l) => l.id));
+    const updating = levels.filter((l) => onServer.has(l.id));
+    const fresh = levels.length - updating.length;
+
+    const parts = [`Push ${levels.length} level${levels.length === 1 ? '' : 's'} to the server?`, ''];
+    if (fresh) parts.push(`${fresh} new`);
+    if (updating.length) {
+      parts.push(`${updating.length} will overwrite what is on the server now:`);
+      // Named, not just counted: overwriting someone else's published level is
+      // the part worth seeing before you agree to it.
+      parts.push(updating.map((l) => `  · ${l.name}`).join('\n'));
+    }
+    if (!confirm(parts.join('\n'))) return;
+
+    const label = btn.textContent ?? 'Push all to Server';
+    btn.disabled = true;
+
+    const failed: string[] = [];
+    let done = 0;
+    for (const level of levels) {
+      btn.textContent = `Pushing ${done + 1}/${levels.length}…`;
+      try {
+        await server.publish(exportPayload(level));
+      } catch (err) {
+        // One bad level must not strand the rest -- keep going, report at the end.
+        failed.push(`${level.name}: ${describe(err)}`);
+      }
+      done++;
+    }
+
+    if (this.disposed || !this.root.isConnected) return;
+    btn.textContent = failed.length
+      ? `Pushed ${levels.length - failed.length}/${levels.length}`
+      : `Pushed ${levels.length} \u2713`;
+    if (failed.length) alert(`Some levels did not push:\n\n${failed.join('\n')}`);
+
+    await this.load();
+    this.timers.push(setTimeout(() => {
+      if (this.disposed || !this.root.isConnected) return;
+      btn.disabled = false;
+      btn.textContent = label;
+    }, 2000));
   }
 
   private downloadAll(btn: HTMLButtonElement) {

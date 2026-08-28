@@ -9,15 +9,19 @@ interface LevelRow { id: string; prototype: string; name: string; data: LevelDat
 /**
  * Levels shared with everyone, in the studio's Supabase project.
  *
- * Read-only here on purpose. There is no `save` and no `remove`: publishing
- * happens from the editor as a deliberate act, and the key has no delete
- * permission at all. To revise one, copy it down to Local or Repo, edit, and
- * publish again -- the id is preserved, so it replaces rather than duplicates.
+ * There is no `save`: a level here is not edited in place. Publishing is a
+ * deliberate act from the editor or the Push all button, and revising one means
+ * copying it down to Local or Repo, editing, and publishing again -- the id is
+ * preserved, so it replaces rather than duplicates.
+ *
+ * `remove` exists and deletes for everyone, immediately. It needs the delete
+ * grant and policy from docs/supabase-schema.sql; without them Supabase reports
+ * no error and removes no rows, so this verifies the row is actually gone.
  */
 export class ServerSource implements LevelSource {
   readonly id = 'server' as const;
   readonly label = 'Server';
-  readonly blurb = 'Shared with everyone. Read-only — copy one down to change it.';
+  readonly blurb = 'Shared with everyone. Copy one down to change it; Delete removes it for everyone.';
   readonly available: boolean;
 
   private client: SupabaseClient | null;
@@ -35,6 +39,29 @@ export class ServerSource implements LevelSource {
       .eq('prototype', this.prototype);
     if (error) throw error;
     return (data ?? []).map((r) => (r as { data: LevelData }).data).filter(validateLevelData);
+  }
+
+  /**
+   * Delete for everyone. PostgREST answers a delete that matched no rows exactly
+   * as it answers one that matched -- no error either way -- so a missing delete
+   * policy would look like success. `select()` makes it return the rows it
+   * actually removed, which is the only way to tell the two apart.
+   */
+  async remove(level: LevelData): Promise<void> {
+    if (!this.client) throw new Error('no Supabase project configured');
+    const { data, error } = await this.client
+      .from('levels')
+      .delete()
+      .eq('prototype', this.prototype)
+      .eq('id', level.id)
+      .select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error(
+        'nothing was deleted -- the project is probably missing the delete grant or policy. ' +
+        'Run the delete lines from docs/supabase-schema.sql.',
+      );
+    }
   }
 
   /** Not part of LevelSource -- publishing is an explicit action, not a save. */

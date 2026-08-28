@@ -105,7 +105,7 @@ so. A level that exists in more than one source is now flagged, not hidden.
 | --- | --- | --- | --- | --- |
 | **Local** | this browser's `localStorage` | yes | yes | only you |
 | **Repo** | `src/levels/published/*.json` | yes | yes | whoever pulls the repo |
-| **Server** | Supabase | no | no | everyone |
+| **Server** | Supabase | no | yes | everyone |
 
 **Repo is available only under `npm run dev`.** A browser cannot write to disk,
 so the Repo tab talks to a middleware the Vite dev server installs
@@ -120,10 +120,20 @@ another level already uses gets a numeric suffix. The middleware refuses any
 filename that is not a bare kebab-case `.json`, so nothing can be written
 outside the levels directory.
 
-**Server is read-only.** To revise a published level, copy it down to Local or
-Repo with the `→` button, edit it, and publish again. The copy keeps the same
-id, so publishing replaces rather than duplicates. Deleting is not possible at
-all: the key has no delete permission, deliberately.
+**A server level is not edited in place.** To revise one, copy it down to Local
+or Repo with the `→` button, edit it, and publish again. The copy keeps the same
+id, so publishing replaces rather than duplicates.
+
+**Deleting a server level is possible, and removes it for everyone** with no
+undo. It needs the delete grant and policy in `docs/supabase-schema.sql`; on a
+project set up before 2026-08-28 those must be added by hand, and until they are
+`remove()` fails loudly rather than appearing to succeed — PostgREST reports a
+delete that matched no rows exactly as it reports one that did.
+
+**Push all** on the Local or Repo tab publishes that whole tab to the server in
+one go, upserting by `(prototype, id)`. It names the levels it is about to
+overwrite before it does anything, since those are a colleague's published
+copies.
 
 **Ids are the identity.** The same id in two tabs is the same level in two
 places — that is what the "also in" flag means. Saving in one tab never touches

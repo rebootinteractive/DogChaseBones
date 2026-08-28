@@ -26,9 +26,8 @@ create index if not exists levels_prototype_idx on public.levels (prototype);
 --    not expose new tables automatically (and from 30 May 2026 that is the
 --    default), so these are stated explicitly rather than relying on the
 --    "Automatically expose new tables" setting. Harmless if it is already on.
---    No delete grant: the anon role cannot delete a level even by mistake.
 grant usage on schema public to anon;
-grant select, insert, update on public.levels to anon;
+grant select, insert, update, delete on public.levels to anon;
 
 -- 2. Row Level Security decides which rows it may touch once it can see them.
 alter table public.levels enable row level security;
@@ -37,4 +36,15 @@ alter table public.levels enable row level security;
 create policy "anon read"   on public.levels for select using (true);
 create policy "anon insert" on public.levels for insert with check (true);
 create policy "anon update" on public.levels for update using (true) with check (true);
--- No delete policy: anon cannot delete rows. Intentional.
+create policy "anon delete" on public.levels for delete using (true);
+
+-- Delete was withheld until 2026-08-28, then granted deliberately. The reasoning:
+-- the anon key is public by studio policy and already carries `update`, so
+-- anyone holding it can already overwrite any level with garbage. Delete does
+-- not create the destructive capability; it removes the row as well as the
+-- content. Recovery for either is the same -- restore from the repo copy or
+-- from a Supabase backup -- so withholding delete bought a smaller safety
+-- margin than it appeared to, at the cost of levels nobody could clear out.
+--
+-- Rerun note: `create policy` has no `if not exists`. On an existing project
+-- run just the grant and this one policy, not the whole file.
