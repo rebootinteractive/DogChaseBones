@@ -1,114 +1,112 @@
 {
   "id": "custom-d1af2496-02b4-4714-bdaf-78acab91ac0d",
-  "meta": {
-    "cols": 7,
-    "rows": 5,
-    "schema": 1,
-    "timeLimit": 120
-  },
   "name": "SoftLock",
+  "prototype": "dog-chase-bones",
   "elements": [
     {
+      "type": "wall",
       "x": 0,
-      "y": 2,
-      "type": "wall"
+      "y": 2
     },
     {
+      "type": "wall",
       "x": 3,
-      "y": 2,
-      "type": "wall"
+      "y": 2
     },
     {
+      "type": "wall",
       "x": 4,
-      "y": 2,
-      "type": "wall"
+      "y": 2
     },
     {
+      "type": "wall",
       "x": 2,
-      "y": 2,
-      "type": "wall"
+      "y": 2
     },
     {
+      "type": "wall",
       "x": 0,
-      "y": 4,
-      "type": "wall"
+      "y": 4
     },
     {
+      "type": "wall",
       "x": 3,
-      "y": 3,
-      "type": "wall"
+      "y": 3
     },
     {
+      "type": "wall",
       "x": 5,
-      "y": 0,
-      "type": "wall"
+      "y": 0
     },
     {
+      "type": "wall",
       "x": 4,
-      "y": 1,
-      "type": "wall"
+      "y": 1
     },
     {
+      "type": "wall",
       "x": 4,
-      "y": 0,
-      "type": "wall"
+      "y": 0
     },
     {
-      "x": 1,
-      "y": 3,
       "type": "block",
-      "group": "g1"
-    },
-    {
-      "x": 2,
-      "y": 3,
-      "type": "block",
-      "group": "g1"
-    },
-    {
       "x": 0,
       "y": 3,
-      "type": "block",
-      "group": "g1"
+      "cells": [
+        [0, 0],
+        [1, 0],
+        [2, 0]
+      ]
     },
     {
+      "type": "block",
       "x": 4,
       "y": 3,
-      "type": "block",
-      "group": "g2"
+      "cells": [
+        [0, 0]
+      ]
     },
     {
+      "type": "block",
       "x": 6,
       "y": 4,
-      "type": "block",
-      "group": "g3"
+      "cells": [
+        [0, 0]
+      ]
     },
     {
+      "type": "bone",
       "x": 2,
       "y": 3,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "bone",
       "x": 4,
       "y": 3,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "queue",
       "x": 0,
       "y": 0,
       "dir": "up",
-      "type": "queue",
       "count": 1
     },
     {
+      "type": "queue",
       "x": 6,
       "y": 4,
       "dir": "right",
-      "type": "queue",
       "count": 1
     }
   ],
-  "prototype": "dog-chase-bones"
+  "meta": {
+    "schema": 3,
+    "cols": 7,
+    "rows": 5,
+    "timeLimit": 120
+  }
 }

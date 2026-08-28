@@ -1,7 +1,7 @@
 import type { LevelData } from '../../src/shared/types';
 import { parseLevel } from '../../src/game/level';
 import { createBoard } from '../../src/game/board';
-import type { BoardState } from '../../src/game/board';
+import type { BlockGroup, BoardState } from '../../src/game/board';
 import { finishWalker, isWon, resolveMoves } from '../../src/game/resolve';
 import { canStepGroup, slideGroupBy, stepGroup } from '../../src/game/slide';
 import { DIRS, DIR_VEC, colOf, rowOf } from '../../src/game/cells';
@@ -21,18 +21,34 @@ import type { Dir } from '../../src/game/cells';
  * path from it reaches a win. Everything else is a grave.
  */
 
-export interface Move { group: string; dir: Dir; cells: number }
+/**
+ * A group has no id, so a move names one by its position in `state.groups`.
+ * Cloning preserves that order -- a split only ever appends, and a group that
+ * empties is filtered out without disturbing the rest -- so an index taken from
+ * one state addresses the same piece in its clone.
+ */
+export interface Move { group: number; dir: Dir; cells: number }
+
+/** The group holding `cell`, for pointing at one without naming it. */
+export function groupAt(s: BoardState, cell: number): BlockGroup {
+  const g = s.unitAt.get(cell);
+  if (!g) throw new Error(`no block at cell ${cell}`);
+  return g;
+}
 
 export function cloneState(s: BoardState): BoardState {
+  const groups = s.groups.map((g): BlockGroup => ({ cells: new Set(g.cells) }));
+  const unitAt = new Map<number, BlockGroup>();
+  groups.forEach((g) => { for (const c of g.cells) unitAt.set(c, g); });
   return {
     cols: s.cols,
     rows: s.rows,
     dead: new Set(s.dead),
     walls: new Set(s.walls),
     bees: new Set(s.bees),
-    units: new Map([...s.units].map(([c, u]) => [c, { ...u }])),
+    groups,
+    unitAt,
     bones: new Map([...s.bones].map(([c, b]) => [c, { ...b }])),
-    groups: new Map([...s.groups].map(([g, cells]) => [g, new Set(cells)])),
     sources: s.sources.map((q) => ({ ...q })),
     gridDogs: new Set(s.gridDogs),
     walkers: s.walkers.map((w) => ({ ...w, path: [...w.path] })),
@@ -51,10 +67,10 @@ export function playOut(state: BoardState): number {
   throw new Error('playOut never settled');
 }
 
-/** Physical configuration, independent of group id naming. */
+/** Physical configuration, independent of the order groups happen to be in. */
 export function key(s: BoardState): string {
-  const groups = [...s.groups.values()]
-    .map((cells) => [...cells].sort((a, b) => a - b).join('.'))
+  const groups = s.groups
+    .map((g) => [...g.cells].sort((a, b) => a - b).join('.'))
     .sort()
     .join('|');
   const bones = [...s.bones]
@@ -80,12 +96,12 @@ export function key(s: BoardState): string {
 export function successors(s: BoardState, corners = false): Array<{ move: Move; state: BoardState }> {
   const out: Array<{ move: Move; state: BoardState }> = [];
   const reach = Math.max(s.cols, s.rows);
-  for (const group of [...s.groups.keys()]) {
+  for (let group = 0; group < s.groups.length; group++) {
     for (const dir of DIRS) {
       const { dc, dr } = DIR_VEC[dir];
       const cur = cloneState(s);
       for (let cells = 1; cells <= reach; cells++) {
-        if (!stepGroup(cur, group, dc, dr)) break;
+        if (!stepGroup(cur, cur.groups[group], dc, dr)) break;
         const state = cloneState(cur);
         playOut(state);
         out.push({ move: { group, dir, cells }, state });
@@ -96,7 +112,7 @@ export function successors(s: BoardState, corners = false): Array<{ move: Move; 
       for (let wr = -reach; wr <= reach; wr++) {
         if (wc === 0 || wr === 0) continue;   // straight drags already covered
         const state = cloneState(s);
-        const moved = slideGroupBy(state, group, wc, wr);
+        const moved = slideGroupBy(state, state.groups[group], wc, wr);
         if (moved.dc === 0 && moved.dr === 0) continue;
         playOut(state);
         out.push({ move: { group, dir: (moved.dc ? (moved.dc > 0 ? 'right' : 'left') : (moved.dr > 0 ? 'down' : 'up')), cells: Math.abs(moved.dc) + Math.abs(moved.dr) }, state });
@@ -188,14 +204,24 @@ export function analyze(level: LevelData, limit = 200_000, corners = false): Ana
 
 // --------------------------------------------------------------- rendering ---
 
+/**
+ * Groups have no names, so one is made from position: 'a' for the first group
+ * on the board, 'b' for the second. Two cells sharing a letter are one piece.
+ */
 export function render(s: BoardState): string[] {
+  const letter = new Map<BlockGroup, string>();
+  s.groups.forEach((g, n) => letter.set(g, String.fromCharCode(97 + (n % 26))));
+
   const out: string[] = [];
   for (let r = 0; r < s.rows; r++) {
     let line = '';
     for (let c = 0; c < s.cols; c++) {
       const i = r * s.cols + c;
-      const u = s.units.get(i);
-      if (u) line += s.bones.has(i) ? u.group[0].toUpperCase() : u.group[0];
+      const g = s.unitAt.get(i);
+      if (g) {
+        const ch = letter.get(g) ?? '?';
+        line += s.bones.has(i) ? ch.toUpperCase() : ch;
+      }
       else if (s.bones.has(i)) line += '+';
       else if (s.gridDogs.has(i)) line += '@';
       else if (s.dead.has(i)) line += 'X';
@@ -209,9 +235,9 @@ export function render(s: BoardState): string[] {
 }
 
 export function describe(s: BoardState, m: Move): string {
-  const cells = [...(s.groups.get(m.group) ?? [])].sort((a, b) => a - b);
+  const cells = [...(s.groups[m.group]?.cells ?? [])].sort((a, b) => a - b);
   const at = cells.map((c) => `(${colOf(s.cols, c)},${rowOf(s.cols, c)})`).join('');
-  return `drag ${m.group} ${at} ${m.dir} ${m.cells}`;
+  return `drag ${String.fromCharCode(97 + m.group)} ${at} ${m.dir} ${m.cells}`;
 }
 
 /**
@@ -240,15 +266,17 @@ export function distToWin(a: Analysis): Map<string, number> {
  *
  * A frozen group is the ingredient behind the nastiest soft lock in the game:
  * it partitions the board like a wall, but unlike a wall it can be *unfrozen*
- * by a bite, because a group that loses a unit is smaller and may suddenly fit
+ * by a bite, because a group that loses a cell is smaller and may suddenly fit
  * where it did not. That makes it a one-way door whose key is the bone on it --
  * and spending the only dog that can turn that key leaves the door shut for good.
+ *
+ * Reported as positions in `state.groups`, which is how a move names one.
  */
-export function frozenGroups(state: BoardState): string[] {
-  const out: string[] = [];
-  for (const group of state.groups.keys()) {
+export function frozenGroups(state: BoardState): number[] {
+  const out: number[] = [];
+  state.groups.forEach((group, n) => {
     const canMove = DIRS.some((d) => canStepGroup(state, group, DIR_VEC[d].dc, DIR_VEC[d].dr));
-    if (!canMove) out.push(group);
-  }
+    if (!canMove) out.push(n);
+  });
   return out;
 }

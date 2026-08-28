@@ -1,14 +1,20 @@
-// A placed element inside a level. `type` keys into the prototype's palette.
-// x/y are normalized stage coordinates in [0,1] so levels are resolution-independent.
+// A placed element inside a level. `type` names the kind of thing it is.
+//
+// x/y are integer CELL coordinates -- column and row, origin top left, y down.
+// They are not pixels and not normalized: the camera fits the grid at runtime,
+// so a fraction of the screen would mean nothing. src/game/level.ts owns the
+// list of types and what each one's extra fields mean.
 export interface GameElement {
   type: string;
   x: number;
   y: number;
-  // per-mechanic extra fields (rotation, color, size...) live here
+  // per-element extra fields (a block's `cells`, a bone's `count`/`order`,
+  // a queue's `dir`/`count`) live here
   [key: string]: unknown;
 }
 
-// One authored level: content placed within the fixed stage.
+// One authored level. `meta` carries { schema, cols, rows, timeLimit }; read
+// meta.schema before anything else, and see docs/level-data.md for why.
 export interface LevelData {
   id: string;
   name: string;

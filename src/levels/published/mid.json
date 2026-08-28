@@ -1,241 +1,170 @@
 {
   "id": "b2-tight-squeeze",
-  "meta": {
-    "cols": 6,
-    "rows": 7,
-    "schema": 1,
-    "timeLimit": 150
-  },
   "name": "Mid",
+  "prototype": "dog-chase-bones",
   "elements": [
     {
+      "type": "wall",
       "x": 2,
-      "y": 3,
-      "type": "wall"
+      "y": 3
     },
     {
+      "type": "wall",
       "x": 2,
-      "y": 5,
-      "type": "wall"
+      "y": 5
     },
     {
+      "type": "block",
       "x": 1,
-      "y": 4,
-      "type": "block",
-      "group": "b"
+      "y": 2,
+      "cells": [
+        [0, 0],
+        [0, 1],
+        [0, 2]
+      ]
     },
     {
+      "type": "block",
       "x": 2,
       "y": 4,
-      "type": "block",
-      "group": "g8"
+      "cells": [
+        [0, 0],
+        [1, 0],
+        [2, 0]
+      ]
     },
     {
-      "x": 5,
-      "y": 6,
       "type": "block",
-      "group": "d"
-    },
-    {
-      "x": 4,
-      "y": 6,
-      "type": "block",
-      "group": "d"
-    },
-    {
-      "x": 3,
-      "y": 6,
-      "type": "block",
-      "group": "d"
-    },
-    {
       "x": 5,
       "y": 5,
-      "type": "block",
-      "group": "d"
+      "cells": [
+        [0, 0],
+        [-2, 1],
+        [-1, 1],
+        [0, 1]
+      ]
     },
     {
-      "x": 4,
-      "y": 0,
       "type": "block",
-      "group": "g1"
-    },
-    {
-      "x": 4,
-      "y": 1,
-      "type": "block",
-      "group": "g1"
-    },
-    {
-      "x": 2,
-      "y": 0,
-      "type": "block",
-      "group": "g3"
-    },
-    {
-      "x": 2,
-      "y": 1,
-      "type": "block",
-      "group": "g3"
-    },
-    {
-      "x": 2,
-      "y": 2,
-      "type": "block",
-      "group": "g3"
-    },
-    {
       "x": 3,
-      "y": 2,
-      "type": "block",
-      "group": "g3"
+      "y": 0,
+      "cells": [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+      ]
     },
     {
-      "x": 4,
-      "y": 2,
       "type": "block",
-      "group": "g3"
+      "x": 2,
+      "y": 0,
+      "cells": [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [1, 2],
+        [2, 2]
+      ]
     },
     {
+      "type": "block",
       "x": 0,
       "y": 0,
-      "type": "block",
-      "group": "g4"
+      "cells": [
+        [0, 0],
+        [1, 0],
+        [1, 1]
+      ]
     },
     {
-      "x": 1,
-      "y": 0,
       "type": "block",
-      "group": "g4"
-    },
-    {
       "x": 5,
       "y": 2,
-      "type": "block",
-      "group": "g5"
+      "cells": [
+        [0, 0],
+        [0, 1],
+        [0, 2]
+      ]
     },
     {
-      "x": 5,
-      "y": 3,
       "type": "block",
-      "group": "g5"
-    },
-    {
-      "x": 5,
-      "y": 4,
-      "type": "block",
-      "group": "g5"
-    },
-    {
-      "x": 1,
-      "y": 2,
-      "type": "block",
-      "group": "b"
-    },
-    {
-      "x": 1,
-      "y": 3,
-      "type": "block",
-      "group": "b"
-    },
-    {
-      "x": 3,
-      "y": 0,
-      "type": "block",
-      "group": "g1"
-    },
-    {
-      "x": 3,
-      "y": 1,
-      "type": "block",
-      "group": "g1"
-    },
-    {
       "x": 5,
       "y": 0,
-      "type": "block",
-      "group": "g7"
+      "cells": [
+        [0, 0]
+      ]
     },
     {
+      "type": "block",
       "x": 0,
       "y": 5,
-      "type": "block",
-      "group": "g2"
+      "cells": [
+        [0, 0],
+        [0, 1]
+      ]
     },
     {
-      "x": 1,
-      "y": 1,
-      "type": "block",
-      "group": "g4"
-    },
-    {
-      "x": 0,
-      "y": 6,
-      "type": "block",
-      "group": "g2"
-    },
-    {
-      "x": 3,
-      "y": 4,
-      "type": "block",
-      "group": "g8"
-    },
-    {
-      "x": 4,
-      "y": 4,
-      "type": "block",
-      "group": "g8"
-    },
-    {
+      "type": "bone",
       "x": 2,
       "y": 2,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "bone",
       "x": 4,
       "y": 0,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "bone",
       "x": 3,
       "y": 6,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "bone",
       "x": 1,
       "y": 4,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "bone",
       "x": 0,
       "y": 5,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "bone",
       "x": 2,
       "y": 4,
-      "type": "bone",
-      "count": 1
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "queue",
       "x": 0,
       "y": 0,
       "dir": "up",
-      "type": "queue",
       "count": 3
     },
     {
+      "type": "queue",
       "x": 5,
       "y": 5,
       "dir": "right",
-      "type": "queue",
       "count": 3
     }
   ],
-  "prototype": "dog-chase-bones"
+  "meta": {
+    "schema": 3,
+    "cols": 6,
+    "rows": 7,
+    "timeLimit": 150
+  }
 }

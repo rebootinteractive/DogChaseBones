@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FIXTURE_LEVELS } from './fixtures/levels';
-import { analyze, distToWin, frozenGroups, key, playOut, render } from './softlock/analyze';
+import { analyze, distToWin, frozenGroups, groupAt, key, playOut, render } from './softlock/analyze';
 import { parseLevel } from '../src/game/level';
 import { createBoard, queuesOf, takeBone, dogsRemaining } from '../src/game/board';
 import { resolveMoves } from '../src/game/resolve';
@@ -108,18 +108,20 @@ describe('sl-one-bee', () => {
     expect(queuesOf(state)[0].remaining).toBe(2);
 
     // Seal the near door with the bone block, the far one with the plain block.
-    slideGroupBy(state, 'd', -1, 0);   // d -> (0,1), plugging the left door
-    slideGroupBy(state, 'p', 1, 0);    // p -> (5,1), plugging the right door
+    const d = groupAt(state, idx(6, 1, 1));
+    const p = groupAt(state, idx(6, 4, 1));
+    slideGroupBy(state, d, -1, 0);   // d -> (0,1), plugging the left door
+    slideGroupBy(state, p, 1, 0);    // p -> (5,1), plugging the right door
     playOut(state);
 
     // The hall cleared, and the nearest bone was the plug itself.
-    expect(state.units.has(cell(0, 1))).toBe(false);
+    expect(state.unitAt.has(cell(0, 1))).toBe(false);
     expect(queuesOf(state)[0].remaining).toBe(1);
 
     const a = analyze(level);
     expect(a.dead.has(key(state))).toBe(true);
     // One bone and one dog left, and nothing that can ever bring them together.
-    expect(render(state)).toEqual(['......', '.....p', '.#.##.', '.#Cc#.', '.####.', '..*...']);
+    expect(render(state)).toEqual(['......', '.....a', '.#.##.', '.#Bb#.', '.####.', '..*...']);
   });
 
   it('is won by sealing the far door with the bone block instead', () => {
@@ -127,9 +129,11 @@ describe('sl-one-bee', () => {
     const state = createBoard(spec);
     playOut(state);
 
-    slideGroupBy(state, 'd', -1, 0);   // d -> (0,1)
-    slideGroupBy(state, 'd', 0, 4);    // d -> (0,5), the far end of the left door
-    slideGroupBy(state, 'p', 1, 0);    // p -> (5,1), plugging the right door
+    const d = groupAt(state, idx(6, 1, 1));
+    const p = groupAt(state, idx(6, 4, 1));
+    slideGroupBy(state, d, -1, 0);   // d -> (0,1)
+    slideGroupBy(state, d, 0, 4);    // d -> (0,5), the far end of the left door
+    slideGroupBy(state, p, 1, 0);    // p -> (5,1), plugging the right door
     playOut(state);
 
     expect(queuesOf(state)[0].remaining).toBe(0);
@@ -147,11 +151,12 @@ describe('sl-one-bee', () => {
     const state = createBoard(spec);
     playOut(state);
 
-    slideGroupBy(state, 'd', 0, -1);   // d -> (1,0)
-    slideGroupBy(state, 'd', -1, 0);   // d -> (0,0), the entry cell
+    const d = groupAt(state, idx(6, 1, 1));
+    slideGroupBy(state, d, 0, -1);   // d -> (1,0)
+    slideGroupBy(state, d, -1, 0);   // d -> (0,0), the entry cell
     playOut(state);
 
-    expect(state.units.has(cell(0, 0))).toBe(false);   // eaten off the queue
+    expect(state.unitAt.has(cell(0, 0))).toBe(false);   // eaten off the queue
     expect(queuesOf(state)[0].remaining).toBe(1);
     expect(analyze(level).dead.has(key(state))).toBe(true);
   });
@@ -238,7 +243,7 @@ describe('SoftLock (published) -- a frozen group, and no bee', () => {
     const { spec } = parseLevel(level);
     const state = createBoard(spec);
 
-    expect(frozenGroups(state)).toEqual(['g1']);
+    expect(frozenGroups(state)).toEqual([0]);   // the bar, the board's first group
 
     takeBone(state, cell(2, 3));
     expect(frozenGroups(state)).toEqual([]);   // two cells now, and it fits
@@ -274,7 +279,7 @@ describe('SoftLock (published) -- a frozen group, and no bee', () => {
     playOut(state);
     expect(dogsRemaining(state)).toBe(2);      // g3 covers the entry, nobody moves
 
-    slideGroupBy(state, 'g3', 0, -1);          // g3 off the entry cell
+    slideGroupBy(state, groupAt(state, cell(6, 4)), 0, -1);   // the corner block, off the entry cell
     playOut(state);
 
     // the nearest bone was g2's, two steps away. It is gone, and with it the level.
@@ -287,15 +292,15 @@ describe('SoftLock (published) -- a frozen group, and no bee', () => {
     const state = createBoard(spec);
     playOut(state);
 
-    slideGroupBy(state, 'g2', 2, -3);          // the bone up to the top-right corner
-    slideGroupBy(state, 'g3', 0, -1);          // g3 up into the right column, walling it off
+    slideGroupBy(state, groupAt(state, cell(4, 3)), 2, -3);   // the bone up to the top-right corner
+    slideGroupBy(state, groupAt(state, cell(6, 4)), 0, -1);   // the corner block up, walling the column off
     playOut(state);
     // forced left along the bottom corridor, the dog takes the bar's bone
     expect(state.bones.has(cell(2, 3))).toBe(false);
 
     // The bar is two cells now and can move -- but it has to be parked out of the
     // bottom corridor, not in it, or it simply becomes the next wall.
-    slideGroupBy(state, 'g1', 5, 1);
+    slideGroupBy(state, groupAt(state, cell(1, 3)), 5, 1);   // what is left of the bar
     playOut(state);
     expect(isWon(state)).toBe(true);
   }, 60_000);

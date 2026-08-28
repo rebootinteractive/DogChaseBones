@@ -68,6 +68,7 @@ export function validateLevel(spec: LevelSpec): string[] {
   }
 
   // Dogs and bones are trapped on their own island; check each one separately.
+  // Walls and bees fence a region just as dead cells do -- none of them move.
   const parts = islands(spec);
   if (parts.length > 1) {
     parts.forEach((cells, n) => {

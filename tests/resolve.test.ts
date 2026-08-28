@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { bonesRemaining, queuesOf, isBlocked, dogsRemaining } from '../src/game/board';
 import { finishWalker, isWon, resolveMoves } from '../src/game/resolve';
 import { canStepGroup, slideGroupBy } from '../src/game/slide';
-import { boardFromAscii, toAscii } from './helpers';
+import { boardFromAscii, toAscii, groupAt } from './helpers';
 
 describe('resolveMoves', () => {
   it('sends a leader that has a safe route and reserves the path plus its bone', () => {
@@ -17,9 +17,10 @@ describe('resolveMoves', () => {
 
   it('locks the route against block slides', () => {
     const b = boardFromAscii(['...A', 'b###'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
-    expect(canStepGroup(b, 'b', 0, -1)).toBe(true);
+    const blocker = groupAt(b, 4);
+    expect(canStepGroup(b, blocker, 0, -1)).toBe(true);
     resolveMoves(b);
-    expect(canStepGroup(b, 'b', 0, -1)).toBe(false);
+    expect(canStepGroup(b, blocker, 0, -1)).toBe(false);
   });
 
   it('sends nothing while the bee can reach the only corridor', () => {
@@ -62,10 +63,10 @@ describe('finishWalker', () => {
     const result = finishWalker(b, b.walkers[0]);
     expect(result.boneCell).toBe(1);
     expect(result.groups).toHaveLength(2);
-    expect(b.units.has(1)).toBe(false);
+    expect(b.unitAt.has(1)).toBe(false);
     expect(b.reserved.size).toBe(0);
     expect(b.walkers).toHaveLength(0);
-    expect(toAscii(b)).toEqual(['a.a.', '....', '####']);
+    expect(toAscii(b)).toEqual(['a.b.', '....', '####']);   // two letters: two groups
   });
 
   it('lets the next dog in the queue go once the board has changed', () => {
@@ -101,7 +102,7 @@ describe('eating off the queue', () => {
   it('leaves other groups free to slide while it eats', () => {
     const b = boardFromAscii(['A.b.', '....'], [{ c: 0, r: 0, dir: 'left', count: 1 }]);
     resolveMoves(b);
-    expect(canStepGroup(b, 'b', 1, 0)).toBe(true);
+    expect(canStepGroup(b, groupAt(b, 2), 1, 0)).toBe(true);
   });
 
   it('clears the entry cell so the next dog can walk in', () => {
@@ -109,7 +110,7 @@ describe('eating off the queue', () => {
 
     resolveMoves(b);
     finishWalker(b, b.walkers[0]);
-    expect(b.units.has(0)).toBe(false);
+    expect(b.unitAt.has(0)).toBe(false);
 
     // Entry is open now, so the second dog walks in for the far bone.
     const second = resolveMoves(b);
@@ -146,7 +147,7 @@ describe('a unit carrying several bones', () => {
     resolveMoves(b);
     const first = finishWalker(b, b.walkers[0]);
     expect(first).toMatchObject({ bonesLeft: 2, destroyed: false });
-    expect(b.units.has(0)).toBe(true);
+    expect(b.unitAt.has(0)).toBe(true);
     expect(b.bones.get(0)!.count).toBe(2);
   });
 
@@ -154,28 +155,32 @@ describe('a unit carrying several bones', () => {
     const b = stacked(2, 2);
     resolveMoves(b);
     finishWalker(b, b.walkers[0]);
-    expect(b.units.has(0)).toBe(true);
+    expect(b.unitAt.has(0)).toBe(true);
 
     resolveMoves(b);
     const last = finishWalker(b, b.walkers[0]);
     expect(last).toMatchObject({ bonesLeft: 0, destroyed: true });
-    expect(b.units.has(0)).toBe(false);
+    expect(b.unitAt.has(0)).toBe(false);
     expect(isWon(b)).toBe(true);
   });
 
   it('only splits its group on the last bone', () => {
     const b = boardFromAscii(['aAa.', '....', '####'], [{ c: 3, r: 0, dir: 'up', count: 2 }]);
     b.bones.set(1, { count: 2, order: 1 });
+    const whole = b.groups[0];
 
     resolveMoves(b);
-    expect(finishWalker(b, b.walkers[0]).groups).toEqual(['a']);
-    expect(b.groups.get('a')!.size).toBe(3);
+    // The first bite leaves the block standing, so the group is untouched --
+    // still the same object, still three cells.
+    expect(finishWalker(b, b.walkers[0]).groups).toEqual([whole]);
+    expect(whole.cells.size).toBe(3);
 
     resolveMoves(b);
     expect(finishWalker(b, b.walkers[0]).groups).toHaveLength(2);
+    expect(b.groups).toHaveLength(2);
   });
 
-  it('lets two queues claim two bones off the same unit at once', () => {
+  it('lets two queues claim two bones off the same block at once', () => {
     const b = boardFromAscii(['.A..', '....', '####'], [
       { c: 0, r: 0, dir: 'up', count: 1 },
       { c: 3, r: 0, dir: 'up', count: 1 },
@@ -208,8 +213,8 @@ describe('the bone a dog has committed to', () => {
     resolveMoves(b);
     expect(b.walkers[0].boneCell).toBe(4);
 
-    expect(slideGroupBy(b, 'a', 0, 1)).toEqual({ dc: 0, dr: 0 });
-    expect(canStepGroup(b, 'a', 0, 1)).toBe(false);
+    expect(slideGroupBy(b, groupAt(b, 4), 0, 1)).toEqual({ dc: 0, dr: 0 });
+    expect(canStepGroup(b, groupAt(b, 4), 0, 1)).toBe(false);
 
     const result = finishWalker(b, b.walkers[0]);
     expect(result.destroyed).toBe(true);
@@ -220,16 +225,16 @@ describe('the bone a dog has committed to', () => {
   it('is released again once the dog has eaten', () => {
     const b = boardFromAscii(['.A..b.', '......', '######'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
     resolveMoves(b);
-    expect(canStepGroup(b, 'a', 0, 1)).toBe(false);
+    expect(canStepGroup(b, groupAt(b, 1), 0, 1)).toBe(false);
     finishWalker(b, b.walkers[0]);
     expect(b.reserved.size).toBe(0);
-    expect(canStepGroup(b, 'b', 0, 1)).toBe(true);
+    expect(canStepGroup(b, groupAt(b, 4), 0, 1)).toBe(true);
   });
 
   it('leaves every other group free to move meanwhile', () => {
     const b = boardFromAscii(['.A..b.', '......', '######'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
     resolveMoves(b);
-    expect(canStepGroup(b, 'b', 0, 1)).toBe(true);
+    expect(canStepGroup(b, groupAt(b, 4), 0, 1)).toBe(true);
   });
 
   it('stays pinned while a second dog is still coming for the same stack', () => {
@@ -243,7 +248,7 @@ describe('the bone a dog has committed to', () => {
 
     finishWalker(b, b.walkers[0]);
     expect(b.reserved.has(1)).toBe(true);      // the other dog still wants it
-    expect(canStepGroup(b, 'a', 0, 1)).toBe(false);
+    expect(canStepGroup(b, groupAt(b, 1), 0, 1)).toBe(false);
 
     finishWalker(b, b.walkers[0]);
     expect(b.reserved.size).toBe(0);

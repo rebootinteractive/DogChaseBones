@@ -7,6 +7,7 @@ import { validateLevel } from '../src/game/validate';
 import { finishWalker, isWon, resolveMoves } from '../src/game/resolve';
 import { slideGroupBy } from '../src/game/slide';
 import { idx } from '../src/game/cells';
+import { groupAt } from './helpers';
 import type { LevelData } from '../src/shared/types';
 
 /** Headless play: send every dog that can go, land it instantly, repeat. */
@@ -45,7 +46,8 @@ describe('1 - First Bone', () => {
     expect(playOut(state)).toBe(0);
     expect(isWon(state)).toBe(false);
 
-    expect(slideGroupBy(state, 'a', 1, 0)).toEqual({ dc: 1, dr: 0 });
+    // The group is addressed by a cell it holds: (0,1), its top-left.
+    expect(slideGroupBy(state, groupAt(state, idx(spec.cols, 0, 1)), 1, 0)).toEqual({ dc: 1, dr: 0 });
     expect(playOut(state)).toBe(1);
     expect(isWon(state)).toBe(true);
     expect(spec.timeLimit).toBe(90);
@@ -62,21 +64,21 @@ describe('2 - Tight Squeeze', () => {
     expect(isWon(state)).toBe(false);
     expect(state.bones.get(cell(2, 4))!.count).toBe(1);
 
-    expect(slideGroupBy(state, 'b', 1, 0)).toEqual({ dc: 1, dr: 0 });
+    expect(slideGroupBy(state, groupAt(state, cell(1, 4)), 1, 0)).toEqual({ dc: 1, dr: 0 });
     expect(playOut(state)).toBe(1);
     expect(isWon(state)).toBe(true);
   });
 
-  it('splits the bone group in two when its middle unit is eaten', () => {
+  it('splits the bone group in two when its middle block is eaten', () => {
     const { spec, state } = boardFor('b2-tight-squeeze');
     const cell = (c: number, r: number) => idx(spec.cols, c, r);
 
     playOut(state);
-    slideGroupBy(state, 'b', 1, 0);
+    slideGroupBy(state, groupAt(state, cell(1, 4)), 1, 0);
     playOut(state);
 
-    expect(state.groups.has('b')).toBe(false);
-    expect(state.units.get(cell(2, 4))!.group).not.toBe(state.units.get(cell(4, 4))!.group);
+    // Two objects where there was one -- there is no id to have been renamed.
+    expect(groupAt(state, cell(2, 4))).not.toBe(groupAt(state, cell(4, 4)));
   });
 });
 
@@ -89,17 +91,18 @@ describe('3 - Sealed Room', () => {
     expect(playOut(state)).toBe(0);
     expect(queuesOf(state)[0].remaining).toBe(2);
 
-    expect(slideGroupBy(state, 'p', -1, 0)).toEqual({ dc: -1, dr: 0 });
-    expect(state.units.has(cell(3, 1))).toBe(true);
+    expect(slideGroupBy(state, groupAt(state, cell(4, 1)), -1, 0)).toEqual({ dc: -1, dr: 0 });
+    expect(state.unitAt.has(cell(3, 1))).toBe(true);
 
     expect(playOut(state)).toBe(2);
     expect(isWon(state)).toBe(true);
   });
 
   it('goes back to refusing if the plug is pulled out again', () => {
-    const { state } = boardFor('b3-sealed-room');
-    slideGroupBy(state, 'p', -1, 0);
-    slideGroupBy(state, 'p', 1, 0);
+    const { spec, state } = boardFor('b3-sealed-room');
+    const plug = groupAt(state, idx(spec.cols, 4, 1));
+    slideGroupBy(state, plug, -1, 0);
+    slideGroupBy(state, plug, 1, 0);
     expect(playOut(state)).toBe(0);
   });
 });

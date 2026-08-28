@@ -22,13 +22,12 @@ describe('parseLevel', () => {
     expect(spec.timeLimit).toBe(DEFAULT_TIME_LIMIT);
   });
 
-  it('groups block units by their group field', () => {
+  it('reads one shape per block element', () => {
     const { spec } = parseLevel(levelFromAscii(['aab.', '....']));
-    expect(spec.units.filter((u) => u.group === 'a')).toHaveLength(2);
-    expect(spec.units.filter((u) => u.group === 'b')).toHaveLength(1);
+    expect(spec.shapes).toEqual([[0, 1], [2]]);
   });
 
-  it('attaches a bone to the unit sharing its cell', () => {
+  it('attaches a bone to the block sharing its cell', () => {
     const { spec } = parseLevel(levelFromAscii(['aA..', '....']));
     expect(countBones(spec)).toBe(1);
     expect(spec.bones.get(1)).toEqual({ count: 1, order: 1 });
@@ -37,7 +36,7 @@ describe('parseLevel', () => {
   it('drops an orphan bone and says so', () => {
     const { spec, issues } = parseLevel(level([{ type: 'bone', x: 1, y: 1 }], { cols: 4, rows: 4 }));
     expect(countBones(spec)).toBe(0);
-    expect(issues.join(' ')).toMatch(/no block unit to ride/);
+    expect(issues.join(' ')).toMatch(/no block to ride/);
   });
 
   it('drops elements outside the grid and says so', () => {
@@ -178,7 +177,7 @@ describe('gridBone', () => {
     const { spec, issues } = parseLevel(levelFromAscii(['.+..', '....']));
     expect(issues).toEqual([]);
     expect(spec.bones.get(1)).toEqual({ count: 1, order: 1 });
-    expect(spec.units).toHaveLength(0);
+    expect(spec.shapes).toHaveLength(0);
     expect(countBones(spec)).toBe(1);
   });
 

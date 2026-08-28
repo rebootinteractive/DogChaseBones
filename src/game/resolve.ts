@@ -1,5 +1,5 @@
 import { syncGridDogs, takeBone } from './board';
-import type { BoardState, Walker } from './board';
+import type { BlockGroup, BoardState, Walker } from './board';
 import { beeReach, findRoute } from './pathing';
 
 /**
@@ -79,8 +79,8 @@ export function resolveMoves(state: BoardState): Commitment[] {
 }
 
 export interface EatResult {
-  /** Groups that exist where the eaten unit's group used to be. More than one means it split. */
-  groups: string[];
+  /** Groups that exist where the eaten block's group used to be. More than one means it split. */
+  groups: BlockGroup[];
   boneCell: number;
   /** Bones still on that unit after this bite. */
   bonesLeft: number;
@@ -89,9 +89,9 @@ export interface EatResult {
 }
 
 /**
- * The dog has arrived: take one bone off the unit and free the route. The unit
- * only goes when its last bone does -- and if it was the one thing holding its
- * group together, the group splits then.
+ * The dog has arrived: take one bone off the block and free the route. The
+ * block only goes when its last bone does -- and if it was the one thing
+ * holding its group together, the group splits then.
  */
 export function finishWalker(state: BoardState, walker: Walker): EatResult {
   state.walkers = state.walkers.filter((w) => w !== walker);

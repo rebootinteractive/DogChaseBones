@@ -45,3 +45,33 @@ export function neighbours(cols: number, rows: number, i: number): number[] {
 export function isDir(v: unknown): v is Dir {
   return v === 'up' || v === 'right' || v === 'down' || v === 'left';
 }
+
+/** 4-adjacency connected components within `cells`. */
+export function connectedComponents(cols: number, rows: number, cells: Set<number>): Set<number>[] {
+  const seen = new Set<number>();
+  const out: Set<number>[] = [];
+  for (const start of cells) {
+    if (seen.has(start)) continue;
+    const comp = new Set<number>([start]);
+    seen.add(start);
+    const stack = [start];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      const c = colOf(cols, cur);
+      const r = rowOf(cols, cur);
+      for (const d of DIRS) {
+        const { dc, dr } = DIR_VEC[d];
+        const nc = c + dc;
+        const nr = r + dr;
+        if (!inBounds(cols, rows, nc, nr)) continue;
+        const n = idx(cols, nc, nr);
+        if (!cells.has(n) || seen.has(n)) continue;
+        seen.add(n);
+        comp.add(n);
+        stack.push(n);
+      }
+    }
+    out.push(comp);
+  }
+  return out;
+}

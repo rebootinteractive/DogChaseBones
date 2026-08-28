@@ -1,15 +1,15 @@
 import { colOf, idx, inBounds, rowOf } from './cells';
-import type { BoardState } from './board';
+import type { BlockGroup, BoardState } from './board';
 
 /**
  * Free-drag sliding, Color-Block-Jam style: a group follows the finger one cell
- * at a time and stops the instant any of its units would hit something.
+ * at a time and stops the instant any of its cells would hit something.
  */
 
 /** Can the whole group shift by (dc, dr) without overlapping anything but itself? */
-export function canStepGroup(state: BoardState, group: string, dc: number, dr: number): boolean {
-  const cells = state.groups.get(group);
-  if (!cells || cells.size === 0) return false;
+export function canStepGroup(state: BoardState, group: BlockGroup, dc: number, dr: number): boolean {
+  const cells = group.cells;
+  if (cells.size === 0) return false;
   if (dc === 0 && dr === 0) return false;
 
   for (const cell of cells) {
@@ -26,7 +26,7 @@ export function canStepGroup(state: BoardState, group: string, dc: number, dr: n
     if (state.dead.has(target)) return false;
     if (state.walls.has(target)) return false;
     if (state.bees.has(target)) return false;
-    if (state.units.has(target)) return false;     // another group
+    if (state.unitAt.has(target)) return false;    // another group
     if (state.bones.has(target)) return false;     // a bone standing on the grid
     if (state.gridDogs.has(target)) return false;  // a dog standing on the grid
     if (state.reserved.has(target)) return false;  // a dog's locked route
@@ -35,31 +35,26 @@ export function canStepGroup(state: BoardState, group: string, dc: number, dr: n
 }
 
 /** Apply a single-cell step. Returns false and changes nothing when blocked. */
-export function stepGroup(state: BoardState, group: string, dc: number, dr: number): boolean {
+export function stepGroup(state: BoardState, group: BlockGroup, dc: number, dr: number): boolean {
   if (!canStepGroup(state, group, dc, dr)) return false;
 
-  const cells = state.groups.get(group)!;
-  const moving = [...cells].map((cell) => ({
-    cell,
-    unit: state.units.get(cell)!,
-    bones: state.bones.get(cell),
-  }));
+  const moving = [...group.cells].map((cell) => ({ cell, bones: state.bones.get(cell) }));
 
   // Clear the whole footprint first: a group may slide over its own cells, so
   // a cell-by-cell move would overwrite an entry it still needs.
   for (const { cell } of moving) {
-    state.units.delete(cell);
+    state.unitAt.delete(cell);
     state.bones.delete(cell);
   }
 
   const next = new Set<number>();
-  for (const { cell, unit, bones } of moving) {
+  for (const { cell, bones } of moving) {
     const target = idx(state.cols, colOf(state.cols, cell) + dc, rowOf(state.cols, cell) + dr);
-    state.units.set(target, unit);
+    state.unitAt.set(target, group);
     if (bones) state.bones.set(target, bones);
     next.add(target);
   }
-  state.groups.set(group, next);
+  group.cells = next;
   return true;
 }
 
@@ -70,7 +65,7 @@ export function stepGroup(state: BoardState, group: string, dc: number, dr: numb
  */
 export function slideGroupBy(
   state: BoardState,
-  group: string,
+  group: BlockGroup,
   wantDc: number,
   wantDr: number,
 ): { dc: number; dr: number } {

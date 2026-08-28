@@ -1,64 +1,67 @@
 import { describe, it, expect } from 'vitest';
 import { canStepGroup, slideGroupBy, stepGroup } from '../src/game/slide';
-import { boardFromAscii, toAscii } from './helpers';
+import { boardFromAscii, groupAt, toAscii } from './helpers';
 
 describe('canStepGroup', () => {
   it('lets a group move into open cells', () => {
     const b = boardFromAscii(['aa..', '....']);
-    expect(canStepGroup(b, 'a', 1, 0)).toBe(true);
-    expect(canStepGroup(b, 'a', 0, 1)).toBe(true);
+    expect(canStepGroup(b, groupAt(b, 0), 1, 0)).toBe(true);
+    expect(canStepGroup(b, groupAt(b, 0), 0, 1)).toBe(true);
   });
 
   it('refuses to leave the grid', () => {
     const b = boardFromAscii(['aa..', '....']);
-    expect(canStepGroup(b, 'a', -1, 0)).toBe(false);
-    expect(canStepGroup(b, 'a', 0, -1)).toBe(false);
+    expect(canStepGroup(b, groupAt(b, 0), -1, 0)).toBe(false);
+    expect(canStepGroup(b, groupAt(b, 0), 0, -1)).toBe(false);
   });
 
   it('refuses walls, bees, dead cells and other groups', () => {
-    expect(canStepGroup(boardFromAscii(['aa#.']), 'a', 1, 0)).toBe(false);
-    expect(canStepGroup(boardFromAscii(['aa*.']), 'a', 1, 0)).toBe(false);
-    expect(canStepGroup(boardFromAscii(['aaX.']), 'a', 1, 0)).toBe(false);
-    expect(canStepGroup(boardFromAscii(['aab.']), 'a', 1, 0)).toBe(false);
+    for (const rows of [['aa#.'], ['aa*.'], ['aaX.'], ['aab.']]) {
+      const b = boardFromAscii(rows);
+      expect(canStepGroup(b, groupAt(b, 0), 1, 0)).toBe(false);
+    }
   });
 
   it('lets a group move through cells it is vacating itself', () => {
     // The whole 3-wide group shifts right into the cell its own tail leaves.
     const b = boardFromAscii(['aaa.']);
-    expect(canStepGroup(b, 'a', 1, 0)).toBe(true);
+    expect(canStepGroup(b, groupAt(b, 0), 1, 0)).toBe(true);
   });
 
   it('refuses cells reserved by a walking dog', () => {
     const b = boardFromAscii(['aa..']);
     b.reserved.add(2);
-    expect(canStepGroup(b, 'a', 1, 0)).toBe(false);
+    expect(canStepGroup(b, groupAt(b, 0), 1, 0)).toBe(false);
   });
 
-  it('is false for a zero step and for an unknown group', () => {
+  it('is false for a zero step and for a group with no cells', () => {
     const b = boardFromAscii(['aa..']);
-    expect(canStepGroup(b, 'a', 0, 0)).toBe(false);
-    expect(canStepGroup(b, 'nope', 1, 0)).toBe(false);
+    expect(canStepGroup(b, groupAt(b, 0), 0, 0)).toBe(false);
+    expect(canStepGroup(b, { cells: new Set<number>() }, 1, 0)).toBe(false);
   });
 });
 
 describe('stepGroup', () => {
-  it('moves every unit and keeps the group set in sync', () => {
+  it('moves every cell and keeps the group and the index in sync', () => {
     const b = boardFromAscii(['aA..', '....']);
-    expect(stepGroup(b, 'a', 1, 0)).toBe(true);
+    const g = groupAt(b, 0);
+    expect(stepGroup(b, g, 1, 0)).toBe(true);
     expect(toAscii(b)).toEqual(['.aA.', '....']);
-    expect([...b.groups.get('a')!].sort((x, y) => x - y)).toEqual([1, 2]);
+    expect([...g.cells].sort((x, y) => x - y)).toEqual([1, 2]);
+    expect(b.unitAt.get(1)).toBe(g);
+    expect(b.unitAt.has(0)).toBe(false);
   });
 
   it('carries bones with the group', () => {
     const b = boardFromAscii(['A...', '....']);
-    stepGroup(b, 'a', 0, 1);
+    stepGroup(b, groupAt(b, 0), 0, 1);
     expect(toAscii(b)).toEqual(['....', 'A...']);
     expect(b.bones.get(4)!.count).toBe(1);
   });
 
   it('changes nothing when blocked', () => {
     const b = boardFromAscii(['aa#.', '....']);
-    expect(stepGroup(b, 'a', 1, 0)).toBe(false);
+    expect(stepGroup(b, groupAt(b, 0), 1, 0)).toBe(false);
     expect(toAscii(b)).toEqual(['aa#.', '....']);
   });
 });
@@ -66,13 +69,13 @@ describe('stepGroup', () => {
 describe('slideGroupBy', () => {
   it('travels the full requested distance when open', () => {
     const b = boardFromAscii(['a....', '#####']);
-    expect(slideGroupBy(b, 'a', 4, 0)).toEqual({ dc: 4, dr: 0 });
+    expect(slideGroupBy(b, groupAt(b, 0), 4, 0)).toEqual({ dc: 4, dr: 0 });
     expect(toAscii(b)).toEqual(['....a', '#####']);
   });
 
   it('stops against the first obstacle', () => {
     const b = boardFromAscii(['a.#..', '#####']);
-    expect(slideGroupBy(b, 'a', 4, 0)).toEqual({ dc: 1, dr: 0 });
+    expect(slideGroupBy(b, groupAt(b, 0), 4, 0)).toEqual({ dc: 1, dr: 0 });
     expect(toAscii(b)).toEqual(['.a#..', '#####']);
   });
 
@@ -83,7 +86,7 @@ describe('slideGroupBy', () => {
       '...',
     ]);
     // Wants right 2 / down 2; the wall column forces it down first, then right.
-    expect(slideGroupBy(b, 'a', 2, 2)).toEqual({ dc: 2, dr: 2 });
+    expect(slideGroupBy(b, groupAt(b, 0), 2, 2)).toEqual({ dc: 2, dr: 2 });
     expect(toAscii(b)).toEqual(['..#', '..#', '..a']);
   });
 
@@ -92,28 +95,28 @@ describe('slideGroupBy', () => {
       'a#',
       '##',
     ]);
-    expect(slideGroupBy(b, 'a', 1, 1)).toEqual({ dc: 0, dr: 0 });
+    expect(slideGroupBy(b, groupAt(b, 0), 1, 1)).toEqual({ dc: 0, dr: 0 });
   });
 });
 
 describe('grid bones block sliding', () => {
   it('stops a group dead', () => {
     const b = boardFromAscii(['a.+.', '....']);
-    expect(canStepGroup(b, 'a', 1, 0)).toBe(true);
-    expect(slideGroupBy(b, 'a', 3, 0)).toEqual({ dc: 1, dr: 0 });
+    expect(canStepGroup(b, groupAt(b, 0), 1, 0)).toBe(true);
+    expect(slideGroupBy(b, groupAt(b, 0), 3, 0)).toEqual({ dc: 1, dr: 0 });
   });
 
   it('is not dragged along by a group sliding past it', () => {
     const b = boardFromAscii(['a...', '.+..']);
-    slideGroupBy(b, 'a', 3, 0);
+    slideGroupBy(b, groupAt(b, 0), 3, 0);
     expect(b.bones.get(5)).toEqual({ count: 1, order: 1 });
-    expect(b.units.has(5)).toBe(false);
+    expect(b.unitAt.has(5)).toBe(false);
   });
 });
 
 describe('grid dogs block sliding', () => {
   it('stops a group dead', () => {
     const b = boardFromAscii(['a.@.', '....']);
-    expect(slideGroupBy(b, 'a', 3, 0)).toEqual({ dc: 1, dr: 0 });
+    expect(slideGroupBy(b, groupAt(b, 0), 3, 0)).toEqual({ dc: 1, dr: 0 });
   });
 });

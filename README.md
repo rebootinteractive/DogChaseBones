@@ -9,14 +9,14 @@ multi-queue system on the grid edges.
 
 ## Rules
 
-- **A group is a connected run of same-coloured blocks.** Two lumps painted the
-  same colour but not touching are two separate groups and slide independently;
-  make them touch and they become one. Two *different* colours that touch stay
-  separate — that is what the colour is for.
-- **Block groups** are one or more unit blocks that move as a piece. Free drag:
-  the group follows your finger cell by cell and stops the moment any unit hits
-  a wall, another group, a bee, a dog or the grid edge.
-- **Bones** ride block units, so they move with their group — or sit on a grid
+- **A block group is one shape.** It declares its own cells, so two groups can
+  sit flush against each other and stay completely independent — there is no
+  colour or tag that could accidentally make them one piece, and none that could
+  go stale when a group splits.
+- **Block groups** are one or more cells that move as a piece. Free drag: the
+  group follows your finger cell by cell and stops the moment any of its cells
+  hits a wall, another group, a bee, a dog or the grid edge.
+- **Bones** ride block cells, so they move with their group — or sit on a grid
   cell of their own, where they block like a wall until eaten. Either way a cell
   can carry a stack: each dog takes one, and the cell only clears when its last
   bone goes.
@@ -26,8 +26,8 @@ multi-queue system on the grid edges.
   bone is *eaten*, not when it is claimed.
 - **Dogs** wait in queues on the grid boundary, or stand on the board itself.
   Only a queue's leader is live. On drag release, any dog with a safe route sets
-  off on its own, walks in, eats a bone, and destroys its host unit if it had
-  one. The queue then advances. A dog standing on the board blocks like a wall
+  off on its own, walks in, eats a bone, and destroys the block it was riding if
+  it had one. The queue then advances. A dog standing on the board blocks like a wall
   until it eats, and then it is gone.
 - **A committed bone is pinned.** Once a dog sets off for a bone, that block
   group cannot be moved until it has eaten — the bone can't be pulled out from
@@ -36,13 +36,16 @@ multi-queue system on the grid edges.
   it is already under the dog's nose: the dog eats it from where it stands
   without walking a route at all. Nothing is reserved, so other groups stay free
   to slide, and a bee has no route to poison.
-- **Group splitting.** If the eaten unit was the only thing holding a group
-  together, it falls apart into independent groups.
+- **Group splitting.** If the eaten block was the only thing holding a group
+  together, it falls apart into independent groups — the piece keeps one part
+  and the rest become new pieces of their own.
 - **Bees** sit fixed on the board and flood outward through open cells. A dog
   will not walk a route that touches anywhere a bee can reach — you have to seal
   the corridor off first.
-- **Walls** are static and never move. **Dead cells** switch a cell off, which
-  is how a level gets more than one island.
+- **Walls** are static and never move. **Dead cells** switch a cell off, taking
+  it out of the board entirely. A region fenced off by any of dead cells, walls
+  or bees is an island: nothing can ever travel between two of them, which is
+  what the level validator checks dogs and bones against.
 - **Win** when every dog has eaten. **Lose** when the timer hits zero.
 
 ## Layout
@@ -101,10 +104,15 @@ before it starts.
 
 ### Editing tools
 
-- **Block**: pick a group chip, then tap cells to paint with that colour. Tap
-  **+ group** for a new one. Two *different* colours can sit flush and stay
-  independent; two lumps of the *same* colour are separate groups until you
-  paint them together.
+- **Block**: pick a shape from the list, then tap cells to grow it — each tap
+  has to touch the shape, because a shape is always one connected piece. Tapping
+  a cell the shape already holds takes it back out, and tapping one belonging to
+  another shape moves it across. Either way, if that leaves a shape in two
+  pieces it *splits* into two shapes, exactly as it would in play. **+ shape**
+  starts a new one, and the **×** on a chip deletes one. Every shape gets its own
+  swatch: eight colours far enough apart to actually tell apart, then the same
+  eight hatched — stripes, cross-hatch, dots — so thirty shapes are still
+  distinct at a glance without inventing thirty barely-different colours.
 - **Move**: drag a whole block group somewhere else. Green means it fits, red
   means it does not, and an invalid drop puts it back.
 - **Bone**: tap a block for a bone that rides it, or bare ground for one that
@@ -113,7 +121,9 @@ before it starts.
   tier badge only appears once a level uses more than one.
 - **Dog**: tap a cell to stand a dog on the board. It blocks until it eats.
   A warning appears if a bee can reach it, since it could never set off.
-- **Wall / Bee / Off**: tap cells. *Off* is how you cut a level into islands.
+- **Wall / Bee / Off**: tap cells. *Off* takes a cell out of the board; walls
+  and bees fence a region off just as effectively, and all three count when the
+  validator looks for islands.
 - **Queue**: tap a boundary cell to add one. Tap it again to select it, then tap
   for one more dog and shift-tap for one fewer — the same gesture the Bone tool
   uses for a stack. Turn and Remove stay buttons, so a stray tap cannot destroy
@@ -125,7 +135,7 @@ before it starts.
 | key | does |
 | --- | --- |
 | `1`–`9` | pick a tool: Block, Move, Bone, Wall, Bee, Off, Queue, Dog, Erase |
-| `⇧1`–`⇧9` | pick a paint colour (Block tool) or a bone tier (Bone tool) |
+| `⇧1`–`⇧9` | pick a shape (Block tool) or a bone tier (Bone tool) |
 
 **Download all** saves every level in the current tab as its own `.json`.
 

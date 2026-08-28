@@ -3,9 +3,12 @@ import type { FederatedPointerEvent } from 'pixi.js';
 import type { GameElement, LevelData } from '../shared/types';
 import type { LevelLibrary } from '../levels/library';
 import type { SourceId } from '../levels/sources/types';
+import { blockElement, formatLevelJson } from '../levels/serialize';
 import { ServerSource } from '../levels/sources/server';
 import { SETTINGS } from '../game/settings';
-import { DIRS, DIR_VEC, colOf, idx, rowOf } from '../game/cells';
+import { DIRS, DIR_VEC, colOf, connectedComponents, idx, rowOf } from '../game/cells';
+import { detachCell, dropShape, indexShapes, paintCell } from './shapes';
+import type { Grid, Shape, ShapeList } from './shapes';
 import type { Dir } from '../game/cells';
 import { MAX_BONE_ORDER, MAX_DIM, MIN_DIM, SCHEMA_VERSION, parseLevel } from '../game/level';
 import type { BoneStack } from '../game/level';
@@ -13,13 +16,14 @@ import { boundaryDirs } from '../game/board';
 import { validateLevel } from '../game/validate';
 import { cellAt, cellCenter, colRowCenter, computeEditorCamera, toCellDelta } from '../game/camera';
 import type { Camera } from '../game/camera';
-import { componentAt, evaluatePlacement } from '../game/place';
+import { evaluatePlacement } from '../game/place';
 import type { Placement, PlacementBoard } from '../game/place';
-import { groupTint } from '../render/color';
+import { groupFill, groupTint } from '../render/color';
+import type { GroupFill } from '../render/color';
 import { LabelPool } from '../render/labels';
 import {
   drawBee, drawBlockGroup, drawBone, drawBonePip, drawCell, drawDog,
-  drawPlacementCell, drawTierBadge, drawVacatedCell, drawWall,
+  drawPlacementCell, drawSelectedCell, drawTierBadge, drawVacatedCell, drawWall,
 } from '../render/draw';
 
 export interface EditorOptions {
@@ -38,8 +42,8 @@ interface EditorQueue { cell: number; dir: Dir; count: number }
 
 /** A block group picked up with the Move tool and not yet dropped. */
 interface MoveDrag {
-  group: string;
-  /** The group's cells before the drag started. */
+  shape: Shape;
+  /** The shape's cells before the drag started. */
   cells: number[];
   /** Bone counts on those cells, so stacks travel with their units. */
   bones: Map<number, BoneStack>;
@@ -53,8 +57,8 @@ interface MoveDrag {
 const C = SETTINGS.colors;
 const L = SETTINGS.layout;
 
-/** Group slots reachable from the keyboard. Beyond this, use the chips. */
-const KEY_GROUP_SLOTS = 9;
+/** Shape slots reachable from the keyboard. Beyond this, use the chips. */
+const KEY_SHAPE_SLOTS = 9;
 
 /** Most bones one unit may carry. Deep enough to be useful, shallow enough to read. */
 const MAX_BONES_PER_UNIT = 9;
@@ -66,12 +70,12 @@ const NEW_QUEUE_DOGS = 1;
 const MAX_QUEUE_DOGS = 20;
 
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
-  { id: 'block', label: 'Block', hint: 'Tap cells to add them to the active group.' },
+  { id: 'block', label: 'Block', hint: 'Tap cells to grow the selected shape. A shape must stay one connected piece; breaking it splits it in two.' },
   { id: 'move', label: 'Move', hint: 'Drag a whole block group somewhere else. Red means it will not fit.' },
   { id: 'bone', label: 'Bone', hint: 'Tap a block for a bone that rides it, or bare ground for one on the grid. Tapping a bone of another tier moves it to the selected tier; tapping one already on it adds to the stack. Shift-tap takes one off.' },
   { id: 'wall', label: 'Wall', hint: 'Static, unmovable, blocks everything.' },
   { id: 'bee', label: 'Bee', hint: 'Fixed. Poisons every cell it can reach.' },
-  { id: 'dead', label: 'Off', hint: 'Switch a cell off. Use these to split islands.' },
+  { id: 'dead', label: 'Off', hint: 'Switch a cell off — it stops being part of the board. Walls and bees fence a region too.' },
   { id: 'queue', label: 'Queue', hint: 'Tap a boundary cell to add a queue. Tap it again for one more dog, shift-tap for one fewer. Turn and Remove are buttons.' },
   { id: 'dog', label: 'Dog', hint: 'Tap a cell to stand a dog on the board. It blocks like a wall until it eats.' },
   { id: 'erase', label: 'Erase', hint: 'Clear whatever is in the cell.' },
@@ -97,19 +101,22 @@ export class EditorApp {
   private dead = new Set<number>();
   private walls = new Set<number>();
   private bees = new Set<number>();
-  private units = new Map<number, string>();   // cell -> group id
+  /**
+   * Every block group, plus the cell index over them. Identity is the object,
+   * exactly as on the board -- see src/editor/shapes.ts for the editing rules.
+   */
+  private list: ShapeList = indexShapes([]);
   /** cell -> the bone stack on that cell. */
   private bones = new Map<number, BoneStack>();
   /** Cells holding a dog standing on the board. */
   private dogs = new Set<number>();
   private queues: EditorQueue[] = [];
 
-  private groups: string[] = ['g1'];
-  private activeGroup = 'g1';
+  /** The shape the Block tool paints into. */
+  private active: Shape | null = null;
   /** Tier new bones join. Named activeTier so it cannot be confused with
    *  board.ts's activeOrder(), which is the lowest tier still on a board. */
   private activeTier = 1;
-  private groupSeq = 1;
 
   private tool: Tool = 'block';
   private cam!: Camera;
@@ -133,7 +140,7 @@ export class EditorApp {
     this.timeLimit = typeof meta.timeLimit === 'number' && meta.timeLimit > 0 ? Math.round(meta.timeLimit) : 120;
     this.name = level?.name ?? 'New Level';
     this.id = level?.id ?? `custom-${crypto.randomUUID()}`;
-    if (level) this.loadElements(level.elements);
+    if (level) this.loadLevel(level);
   }
 
   static async create(parent: HTMLElement, opts: EditorOptions): Promise<EditorApp> {
@@ -142,58 +149,34 @@ export class EditorApp {
     return e;
   }
 
-  private loadElements(elements: GameElement[]) {
-    const seen = new Set<string>();
-    for (const el of elements) {
-      const c = Math.round(Number(el.x));
-      const r = Math.round(Number(el.y));
-      if (!Number.isFinite(c) || !Number.isFinite(r)) continue;
-      if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) continue;
-      const cell = idx(this.cols, c, r);
-      switch (el.type) {
-        case 'dead': this.dead.add(cell); break;
-        case 'wall': this.walls.add(cell); break;
-        case 'bee': this.bees.add(cell); break;
-        case 'bone':
-        case 'gridBone': {
-          const add = Math.max(1, Math.round(Number(el.count) || 1));
-          const rawOrder = Number(el.order);
-          const order = Number.isFinite(rawOrder)
-            ? Math.min(MAX_BONE_ORDER, Math.max(1, Math.round(rawOrder)))
-            : 1;
-          const have = this.bones.get(cell);
-          if (have) have.count = Math.min(MAX_BONES_PER_UNIT, have.count + add);
-          else this.bones.set(cell, { count: Math.min(MAX_BONES_PER_UNIT, add), order });
-          break;
-        }
-        case 'block': {
-          const group = typeof el.group === 'string' && el.group ? el.group : 'g1';
-          this.units.set(cell, group);
-          seen.add(group);
-          break;
-        }
-        case 'gridDog': this.dogs.add(cell); break;
-        case 'queue': {
-          const dir = DIRS.includes(el.dir as Dir) ? (el.dir as Dir) : 'up';
-          const count = Math.max(1, Math.round(Number(el.count) || 1));
-          this.queues.push({ cell, dir, count });
-          break;
-        }
-        default: break;
-      }
-    }
-    if (seen.size) {
-      // Numeric order: a lexical sort would put g10 before g2 and desync the
-      // Shift+N slots from what the chips show.
-      this.groups = [...seen].sort((a, b) => {
-        const na = Number(a.replace(/\D/g, ''));
-        const nb = Number(b.replace(/\D/g, ''));
-        return na === nb ? a.localeCompare(b) : na - nb;
-      });
-      this.activeGroup = this.groups[0];
-      this.groupSeq = this.groups.reduce((n, g) => Math.max(n, Number(g.replace(/\D/g, '')) || 0), 0);
-    }
-    // A bone with no block underneath is a grid bone now, so nothing is dropped.
+  /**
+   * Loading goes through the game's own parser rather than a second reader of
+   * the same format. Older editions arrive already split into connected
+   * pieces, and whatever the editor shows is exactly what the game will play.
+   */
+  private loadLevel(level: LevelData) {
+    const { spec } = parseLevel(level);
+    this.cols = spec.cols;
+    this.rows = spec.rows;
+    this.timeLimit = spec.timeLimit;
+    this.dead = new Set(spec.dead);
+    this.walls = new Set(spec.walls);
+    this.bees = new Set(spec.bees);
+    this.dogs = new Set(spec.gridDogs);
+    this.bones = new Map(
+      [...spec.bones].map(([cell, stack]) => [
+        cell,
+        { count: Math.min(MAX_BONES_PER_UNIT, stack.count), order: stack.order },
+      ]),
+    );
+    this.queues = spec.queues.map((q) => ({ cell: q.cell, dir: q.dir, count: q.count }));
+    this.setShapes(spec.shapes.map((cells) => ({ cells: new Set(cells) })));
+  }
+
+  /** Install a new set of shapes and rebuild the cell index from them. */
+  private setShapes(shapes: Shape[]) {
+    this.list = indexShapes(shapes);
+    this.active = shapes[0] ?? null;
   }
 
   private async init() {
@@ -285,7 +268,7 @@ export class EditorApp {
     const n = Number(digit[1]);
 
     if (e.shiftKey) {
-      if (this.tool === 'block') this.selectGroupSlot(n);
+      if (this.tool === 'block') this.selectShapeSlot(n);
       else if (this.tool === 'bone') this.activeTier = Math.min(n, MAX_BONE_ORDER);
       else return;
     } else {
@@ -299,14 +282,11 @@ export class EditorApp {
     this.refreshChrome();
   };
 
-  /** Slot n of the paint palette, creating the groups up to it on the way. */
-  private selectGroupSlot(n: number) {
-    const want = Math.min(n, KEY_GROUP_SLOTS);
-    while (this.groups.length < want) {
-      this.groupSeq++;
-      this.groups.push(`g${this.groupSeq}`);
-    }
-    this.activeGroup = this.groups[want - 1];
+  /** Slot n of the shape list, adding empty shapes up to it on the way. */
+  private selectShapeSlot(n: number) {
+    const want = Math.min(n, KEY_SHAPE_SLOTS);
+    while (this.shapes.length < want) this.shapes.push({ cells: new Set() });
+    this.active = this.shapes[want - 1];
   }
 
   private cellUnder(e: FederatedPointerEvent): number | null {
@@ -333,15 +313,15 @@ export class EditorApp {
   // ------------------------------------------------------------------ move ---
 
   private beginMove(cell: number, e: FederatedPointerEvent) {
-    const group = this.units.get(cell);
-    if (!group) { this.flash('Nothing to move here — grab a block.'); return; }
+    const shape = this.owner.get(cell);
+    if (!shape) { this.flash('Nothing to move here — grab a block.'); return; }
 
     const p = this.app.stage.toLocal(e.global);
-    // Only the connected lump under the finger moves -- a separate lump that
-    // shares this colour is a different group and stays put.
-    const cells = componentAt(this.placementBoard(), cell);
+    // The shape under the finger, whole. No hunting for a connected run: the
+    // shape already knows which cells are its own.
+    const cells = [...shape.cells].sort((a, b) => a - b);
     this.moveDrag = {
-      group, cells,
+      shape, cells,
       bones: new Map(cells.filter((c) => this.bones.has(c)).map((c) => [c, { ...this.bones.get(c)! }])),
       originX: p.x, originY: p.y,
       dc: 0, dr: 0,
@@ -369,13 +349,16 @@ export class EditorApp {
     if (!drag) return;
 
     if (drag.placement.ok && (drag.dc !== 0 || drag.dr !== 0)) {
-      for (const cell of drag.cells) { this.units.delete(cell); this.bones.delete(cell); }
+      for (const cell of drag.cells) { this.owner.delete(cell); this.bones.delete(cell); }
+      const next = new Set<number>();
       drag.cells.forEach((cell, i) => {
         const target = drag.placement.targets[i];
-        this.units.set(target, drag.group);
+        next.add(target);
+        this.owner.set(target, drag.shape);
         const carried = drag.bones.get(cell);
         if (carried !== undefined) this.bones.set(target, carried);
       });
+      drag.shape.cells = next;
     } else if (!drag.placement.ok) {
       this.flash('That does not fit — the group went back.');
     }
@@ -393,9 +376,9 @@ export class EditorApp {
       bees: this.bees,
       // Only bones with no block under them obstruct: a riding bone's cell is
       // already held by its unit, and travels with the group being dragged.
-      bones: new Set([...this.bones.keys()].filter((c) => !this.units.has(c))),
+      bones: new Set([...this.bones.keys()].filter((c) => !this.owner.has(c))),
       dogs: this.dogs,
-      units: this.units,
+      units: this.owner,
     };
   }
 
@@ -404,14 +387,42 @@ export class EditorApp {
   }
 
   private applyBlock(cell: number) {
-    if (this.dead.has(cell)) return;
-    const existing = this.units.get(cell);
-    if (existing === this.activeGroup) { this.units.delete(cell); this.bones.delete(cell); return; }
-    this.walls.delete(cell);
-    this.bees.delete(cell);
-    this.dogs.delete(cell);
-    // A grid bone already here becomes a riding bone -- the bone survives.
-    this.units.set(cell, this.activeGroup);   // reassigns a unit from another group
+    if (this.dead.has(cell)) { this.flash('That cell is switched off.'); return; }
+
+    const shape = this.active ?? this.addShape();
+    const result = paintCell(this.list, this.grid(), shape, cell);
+
+    if (result.kind === 'refused') { this.flash(result.reason); return; }
+
+    if (result.kind === 'removed') {
+      // The block is gone, so the bone riding it has nothing left to sit on.
+      this.bones.delete(cell);
+      if (result.split === 0 && this.active === shape) this.active = this.shapes[0] ?? null;
+    } else {
+      // Stolen from another shape or painted onto bare ground -- either way the
+      // cell still ends up carrying a block, so a bone on it survives.
+      this.walls.delete(cell);
+      this.bees.delete(cell);
+      this.dogs.delete(cell);
+    }
+    if (result.split > 1) this.flash(`That split a shape into ${result.split}.`);
+  }
+
+  private get shapes(): Shape[] { return this.list.shapes; }
+  private get owner() { return this.list.owner; }
+  private grid(): Grid { return { cols: this.cols, rows: this.rows }; }
+
+  private addShape(): Shape {
+    const shape: Shape = { cells: new Set() };
+    this.list.shapes.push(shape);
+    this.active = shape;
+    return shape;
+  }
+
+  /** Remove a shape and everything riding it. */
+  private removeShape(shape: Shape) {
+    for (const cell of dropShape(this.list, shape)) this.bones.delete(cell);
+    if (this.active === shape) this.active = this.shapes[0] ?? null;
   }
 
   private toggleDog(cell: number) {
@@ -504,7 +515,12 @@ export class EditorApp {
   }
 
   private clearCell(cell: number) {
-    this.units.delete(cell);
+    const shape = this.owner.get(cell);
+    if (shape) {
+      const split = detachCell(this.list, this.grid(), shape, cell);
+      if (split === 0 && this.active === shape) this.active = this.shapes[0] ?? null;
+      if (split > 1) this.flash(`That split a shape into ${split}.`);
+    }
     this.bones.delete(cell);
     this.dogs.delete(cell);
     this.walls.delete(cell);
@@ -524,15 +540,15 @@ export class EditorApp {
     for (const cell of this.walls) drawWall(this.boardG, this.cam, cell);
 
     const dragging = this.moveDrag;
-    const byGroup = new Map<string, Set<number>>();
-    for (const [cell, group] of this.units) {
-      if (dragging && group === dragging.group) continue;   // drawn as a ghost below
-      let set = byGroup.get(group);
-      if (!set) { set = new Set(); byGroup.set(group, set); }
-      set.add(cell);
-    }
-    for (const [group, cells] of byGroup) {
-      drawBlockGroup(this.boardG, this.cam, cells, this.tintFor(group));
+    this.shapes.forEach((shape, i) => {
+      if (dragging && shape === dragging.shape) return;   // drawn as a ghost below
+      if (!shape.cells.size) return;
+      drawBlockGroup(this.boardG, this.cam, shape.cells, this.tintFor(i), this.fillFor(i));
+    });
+    // Which shape the Block tool would paint into. Nothing else in the editor
+    // needs to say it, and it is the one thing a tap depends on.
+    if (this.tool === 'block' && this.active && !dragging) {
+      for (const cell of this.active.cells) drawSelectedCell(this.boardG, this.cam, cell);
     }
     // While the Bone tool is up, every bone shows its tier even on a
     // single-tier level -- otherwise there is no way to see what you are about
@@ -576,7 +592,7 @@ export class EditorApp {
 
     const landing = new Set(placement.targets.filter((t) => t >= 0));
     if (landing.size) {
-      drawBlockGroup(this.boardG, this.cam, landing, this.tintFor(drag.group));
+      drawBlockGroup(this.boardG, this.cam, landing, this.tintFor(this.indexOf(drag.shape)), this.fillFor(this.indexOf(drag.shape)));
       for (let i = 0; i < drag.cells.length; i++) {
         const target = placement.targets[i];
         const carried = drag.bones.get(drag.cells[i]);
@@ -646,13 +662,21 @@ export class EditorApp {
   }
 
   /**
-   * Groups are tinted while authoring so two flush-but-separate groups are
-   * obviously separate. A group not in the list gets the next free slot rather
-   * than silently sharing colour one.
+   * Shapes are tinted while authoring so two flush-but-separate shapes are
+   * obviously separate -- the game paints them all one colour, so this is the
+   * only place the distinction is visible. Hue comes first; once the palette
+   * wraps, `fillFor` hatches the tiles so a thirtieth shape is still its own.
    */
-  private tintFor(group: string): number {
-    const known = this.groups.indexOf(group);
-    return groupTint(known < 0 ? this.groups.length : known, SETTINGS.editor.groupTints);
+  private tintFor(index: number): number {
+    return groupTint(Math.max(0, index), SETTINGS.editor.groupTints);
+  }
+
+  private fillFor(index: number): GroupFill {
+    return groupFill(Math.max(0, index), SETTINGS.editor.groupTints);
+  }
+
+  private indexOf(shape: Shape): number {
+    return this.shapes.indexOf(shape);
   }
 
   // ------------------------------------------------------------ level i/o ---
@@ -665,10 +689,15 @@ export class EditorApp {
     for (const cell of this.dead) push('dead', cell);
     for (const cell of this.walls) push('wall', cell);
     for (const cell of this.bees) push('bee', cell);
-    for (const [cell, group] of this.units) push('block', cell, { group });
+    // One element per shape. An empty slot in the list is a place to paint
+    // into, not a level element, so it is not written.
+    for (const shape of this.shapes) {
+      if (!shape.cells.size) continue;
+      elements.push(blockElement(this.cols, shape.cells));
+    }
     for (const [cell, stack] of this.bones) {
       // A bone rides a block when one is under it, and sits on the grid when not.
-      push(this.units.has(cell) ? 'bone' : 'gridBone', cell, { count: stack.count, order: stack.order });
+      push(this.owner.has(cell) ? 'bone' : 'gridBone', cell, { count: stack.count, order: stack.order });
     }
     for (const cell of this.dogs) push('gridDog', cell);
     for (const q of this.queues) push('queue', q.cell, { dir: q.dir, count: q.count });
@@ -701,8 +730,15 @@ export class EditorApp {
 
     const keys = (src: Set<number>) => new Set(remap([...src].map((c) => [c, true] as [number, boolean])).map(([c]) => c));
 
-    const nextUnits = new Map(remap(this.units));
     const nextBones = new Map(remap(this.bones));
+    // A shape can lose cells to a shrinking grid, and what is left may be in
+    // pieces -- the same split the Block tool does, applied to every shape.
+    const nextShapes: Shape[] = [];
+    for (const shape of this.shapes) {
+      const kept = new Set(remap([...shape.cells].map((c) => [c, true] as [number, boolean])).map(([c]) => c));
+      if (!kept.size) continue;
+      for (const part of connectedComponents(cols, rows, kept)) nextShapes.push({ cells: part });
+    }
     this.walls = keys(this.walls);
     this.bees = keys(this.bees);
     this.dead = keys(this.dead);
@@ -710,11 +746,11 @@ export class EditorApp {
     this.queues = this.queues
       .filter((q) => colOf(this.cols, q.cell) < cols && rowOf(this.cols, q.cell) < rows)
       .map((q) => ({ ...q, cell: idx(cols, colOf(this.cols, q.cell), rowOf(this.cols, q.cell)) }));
-    this.units = nextUnits;
     this.bones = nextBones;
 
     this.cols = cols;
     this.rows = rows;
+    this.setShapes(nextShapes);
     this.selectedQueue = -1;
     this.fit();
     this.refreshChrome();
@@ -730,7 +766,7 @@ export class EditorApp {
       <div class="chrome-body">
         <div class="tool-row"></div>
         <p class="tool-hint"></p>
-        <p class="key-hint">1\u20139 pick a tool \u00b7 \u21e7 1\u20139 pick a paint colour or bone tier</p>
+        <p class="key-hint">1\u20139 pick a tool \u00b7 \u21e7 1\u20139 pick a shape or bone tier</p>
         <div class="group-row"></div>
         <div class="tier-row group-row"></div>
         <div class="settings-row">
@@ -835,11 +871,9 @@ export class EditorApp {
 
   private clearAll() {
     this.dead.clear(); this.walls.clear(); this.bees.clear(); this.dogs.clear();
-    this.units.clear(); this.bones.clear();
+    this.bones.clear();
     this.queues = [];
-    this.groups = ['g1'];
-    this.activeGroup = 'g1';
-    this.groupSeq = 1;
+    this.setShapes([]);
     this.selectedQueue = -1;
     this.redraw();
     this.refreshChrome();
@@ -854,34 +888,53 @@ export class EditorApp {
     });
     bar.querySelector('.tool-hint')!.textContent = TOOLS.find((t) => t.id === this.tool)?.hint ?? '';
 
-    const groupRow = bar.querySelector<HTMLElement>('.group-row')!;
-    groupRow.style.display = this.tool === 'block' ? 'flex' : 'none';
-    groupRow.innerHTML = '';
-    this.groups.forEach((g, i) => {
+    // The shape list. One row per block group, in the order they serialise,
+    // each carrying the swatch it is drawn with so the list and the board can
+    // never disagree about which shape is which.
+    const shapeRow = bar.querySelector<HTMLElement>('.group-row')!;
+    shapeRow.style.display = this.tool === 'block' ? 'flex' : 'none';
+    shapeRow.innerHTML = '';
+    this.shapes.forEach((shape, i) => {
       const b = document.createElement('button');
-      b.className = 'group-chip' + (g === this.activeGroup ? ' active' : '');
-      b.style.background = '#' + this.tintFor(g).toString(16).padStart(6, '0');
-      b.textContent = g;
-      if (i < KEY_GROUP_SLOTS) {
+      const fill = this.fillFor(i);
+      b.className = `group-chip fill-${fill}` + (shape === this.active ? ' active' : '');
+      // backgroundColor, not background: the hatch patterns are background
+      // images in the stylesheet and the shorthand would wipe them out.
+      b.style.backgroundColor = '#' + this.tintFor(i).toString(16).padStart(6, '0');
+      b.textContent = `${i + 1}`;
+
+      const n = document.createElement('i');
+      n.className = 'chip-count';
+      n.textContent = shape.cells.size ? `\u00d7${shape.cells.size}` : 'empty';
+      b.appendChild(n);
+
+      if (i < KEY_SHAPE_SLOTS) {
         const key = document.createElement('i');
         key.className = 'key';
         key.textContent = `\u21e7${i + 1}`;
         b.appendChild(key);
       }
-      b.onclick = () => { this.activeGroup = g; this.refreshChrome(); };
-      groupRow.appendChild(b);
+
+      const del = document.createElement('i');
+      del.className = 'chip-del';
+      del.textContent = '\u00d7';
+      del.title = 'Delete this shape';
+      del.onclick = (ev) => {
+        ev.stopPropagation();
+        this.removeShape(shape);
+        this.redraw();
+        this.refreshChrome();
+      };
+      b.appendChild(del);
+
+      b.onclick = () => { this.active = shape; this.redraw(); this.refreshChrome(); };
+      shapeRow.appendChild(b);
     });
     const add = document.createElement('button');
     add.className = 'group-chip new';
-    add.textContent = '+ group';
-    add.onclick = () => {
-      this.groupSeq++;
-      const g = `g${this.groupSeq}`;
-      this.groups.push(g);
-      this.activeGroup = g;
-      this.refreshChrome();
-    };
-    groupRow.appendChild(add);
+    add.textContent = '+ shape';
+    add.onclick = () => { this.addShape(); this.redraw(); this.refreshChrome(); };
+    shapeRow.appendChild(add);
 
     // Tier chips mirror the colour chips: same class, same Shift+N gesture.
     const tierRow = bar.querySelector<HTMLElement>('.tier-row')!;
@@ -955,7 +1008,7 @@ export class EditorApp {
   private showPublish() {
     this.modal?.remove();
     const level = this.snapshot();
-    const json = JSON.stringify(level, null, 2);
+    const json = formatLevelJson(level);
     const file = `${slug(this.name)}.json`;
     const server = this.opts.library.get('server');
     const live = server instanceof ServerSource && server.available;
@@ -1025,7 +1078,7 @@ export class EditorApp {
     this.modal?.remove();
     this.host?.remove();
     if (this.saveResetTimer) clearTimeout(this.saveResetTimer);
-    this.units.clear();
+    this.list = indexShapes([]);
     this.queues = [];
     this.boneLabels.destroy();
     this.tierLabels.destroy();

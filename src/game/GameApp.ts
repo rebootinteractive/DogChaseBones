@@ -6,7 +6,7 @@ import { SETTINGS } from './settings';
 import { parseLevel } from './level';
 import type { LevelSpec } from './level';
 import { activeOrder, createBoard, dogsRemaining, queueSlot, queuesOf } from './board';
-import type { BoardState, RuntimeQueue, Walker } from './board';
+import type { BlockGroup, BoardState, RuntimeQueue, Walker } from './board';
 import { cellAt, cellCenter, colRowCenter, computeCamera, toCellDelta } from './camera';
 import type { Camera } from './camera';
 import { slideGroupBy } from './slide';
@@ -36,7 +36,7 @@ interface WalkerAnim {
 }
 
 interface Drag {
-  group: string;
+  group: BlockGroup;
   originX: number;
   originY: number;
   appliedDc: number;
@@ -156,9 +156,9 @@ export class GameApp {
     const p = this.app.stage.toLocal(e.global);
     const cell = cellAt(this.cam, p.x, p.y);
     if (cell === null) return;
-    const unit = this.state.units.get(cell);
-    if (!unit) return;
-    this.drag = { group: unit.group, originX: p.x, originY: p.y, appliedDc: 0, appliedDr: 0 };
+    const group = this.state.unitAt.get(cell);
+    if (!group) return;
+    this.drag = { group, originX: p.x, originY: p.y, appliedDc: 0, appliedDr: 0 };
     this.redraw();
   };
 
@@ -286,8 +286,8 @@ export class GameApp {
     this.boneCounts.begin();
     this.tierLabels.begin();
     for (const cell of this.state.walls) drawWall(this.boardG, this.cam, cell);
-    for (const [group, cells] of this.state.groups) {
-      drawBlockGroup(this.boardG, this.cam, cells, this.drag?.group === group ? C.blockHeld : C.block);
+    for (const group of this.state.groups) {
+      drawBlockGroup(this.boardG, this.cam, group.cells, this.drag?.group === group ? C.blockHeld : C.block);
     }
     // Tier badges appear only when the level actually uses more than one tier,
     // so a single-tier level looks exactly as it always did.

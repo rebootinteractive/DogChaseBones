@@ -1,6 +1,7 @@
-import type { GameElement, LevelData } from '../../src/shared/types';
+import type { LevelData } from '../../src/shared/types';
 import { PROTOTYPE } from '../../src/config';
 import { SCHEMA_VERSION } from '../../src/game/level';
+import { elementsFromAscii } from '../helpers';
 
 /**
  * The three levels this prototype shipped with, kept as fixtures after they were
@@ -8,26 +9,9 @@ import { SCHEMA_VERSION } from '../../src/game/level';
  * played to a win through the real slide/resolve/eat/split path, so they still
  * earn their place even though no player will ever see them.
  *
- * Authored as ASCII so the layout is readable in the diff.
- *   '.' empty   '#' wall   'X' cell switched off   '*' bee
- *   'a'..'z'    a block unit belonging to that group
- *   'A'..'Z'    the same unit, carrying a bone
+ * Authored as ASCII so the layout is readable in the diff -- see
+ * `elementsFromAscii` in tests/helpers.ts for the characters.
  */
-function fromAscii(rows: string[]): GameElement[] {
-  const els: GameElement[] = [];
-  rows.forEach((row, y) => {
-    [...row].forEach((ch, x) => {
-      if (ch === '.') return;
-      if (ch === '#') return void els.push({ type: 'wall', x, y });
-      if (ch === 'X') return void els.push({ type: 'dead', x, y });
-      if (ch === '*') return void els.push({ type: 'bee', x, y });
-      els.push({ type: 'block', x, y, group: ch.toLowerCase() });
-      if (ch === ch.toUpperCase()) els.push({ type: 'bone', x, y });
-    });
-  });
-  return els;
-}
-
 interface QueueDef { x: number; y: number; dir: 'up' | 'right' | 'down' | 'left'; count: number }
 
 function level(
@@ -35,7 +19,7 @@ function level(
 ): LevelData {
   return {
     id, name, prototype: PROTOTYPE,
-    elements: [...fromAscii(rows), ...queues.map((q) => ({ type: 'queue', ...q }))],
+    elements: [...elementsFromAscii(rows), ...queues.map((q) => ({ type: 'queue', ...q }))],
     meta: { schema: SCHEMA_VERSION, cols: rows[0].length, rows: rows.length, timeLimit },
   };
 }

@@ -1,45 +1,55 @@
 import { describe, it, expect } from 'vitest';
-import { boundaryDirs, bonesRemaining, dogsRemaining, islands, removeUnit, takeBone, activeOrder, queuesOf, isBlocked } from '../src/game/board';
+import { boundaryDirs, bonesRemaining, destroyCell, dogsRemaining, islands, takeBone, activeOrder, queuesOf, isBlocked } from '../src/game/board';
 import { stepGroup } from '../src/game/slide';
 import { boardFromAscii, specFromAscii, toAscii } from './helpers';
 
-describe('removeUnit', () => {
-  it('splits a group when the eaten unit was the only thing holding it together', () => {
-    // Driven through takeBone, the only caller of removeUnit in the game -- it
+describe('destroyCell', () => {
+  it('splits a group when the eaten block was the only thing holding it together', () => {
+    // Driven through takeBone, the only caller of destroyCell in the game -- it
     // clears the bone first, so the vacated cell reads as empty rather than as
     // a bone with nothing under it.
     const b = boardFromAscii(['aAa', '...']);
     const { groups, destroyed } = takeBone(b, 1);
     expect(destroyed).toBe(true);
     expect(groups).toHaveLength(2);
-    expect(b.groups.has('a')).toBe(false);
-    expect(b.units.get(0)!.group).not.toBe(b.units.get(2)!.group);
-    expect(toAscii(b)).toEqual(['a.a', '...']);
+    expect(b.groups).toHaveLength(2);
+    // Different objects, so different groups. There is no id to compare.
+    expect(b.unitAt.get(0)).not.toBe(b.unitAt.get(2));
+    expect(toAscii(b)).toEqual(['a.b', '...']);
+  });
+
+  it('keeps the original object for one part, so a held reference stays live', () => {
+    const b = boardFromAscii(['aAa', '...']);
+    const held = b.unitAt.get(0)!;
+    takeBone(b, 1);
+    expect(b.groups).toContain(held);
+    expect([...held.cells]).toEqual([0]);
   });
 
   it('leaves the group intact when the rest stays connected', () => {
     // L-shape: losing the corner-adjacent tail keeps the other two touching.
     const b = boardFromAscii(['aa.', 'A..']);
-    expect(removeUnit(b, 3)).toEqual(['a']);
-    expect([...b.groups.get('a')!].sort((x, y) => x - y)).toEqual([0, 1]);
+    const group = b.unitAt.get(0)!;
+    expect(destroyCell(b, 3)).toEqual([group]);
+    expect([...group.cells].sort((x, y) => x - y)).toEqual([0, 1]);
   });
 
-  it('drops the group entirely when its last unit is eaten', () => {
+  it('drops the group entirely when its last block is eaten', () => {
     const b = boardFromAscii(['A..', '...']);
-    expect(removeUnit(b, 0)).toEqual([]);
-    expect(b.groups.has('a')).toBe(false);
-    expect(b.units.size).toBe(0);
+    expect(destroyCell(b, 0)).toEqual([]);
+    expect(b.groups).toHaveLength(0);
+    expect(b.unitAt.size).toBe(0);
   });
 
   it('splits into three when a cross loses its centre', () => {
     const b = boardFromAscii(['.a.', 'aAa', '.#.']);
-    const groups = removeUnit(b, 4);
-    expect(groups).toHaveLength(3);
+    expect(destroyCell(b, 4)).toHaveLength(3);
+    expect(b.groups).toHaveLength(3);
   });
 
   it('does nothing for an empty cell', () => {
     const b = boardFromAscii(['...', '...']);
-    expect(removeUnit(b, 0)).toEqual([]);
+    expect(destroyCell(b, 0)).toEqual([]);
   });
 });
 
@@ -53,6 +63,23 @@ describe('islands', () => {
     expect(parts).toHaveLength(2);
     expect(parts[0].size).toBe(3);
     expect(parts[1].size).toBe(3);
+  });
+
+  // A wall never moves, so a region fenced by walls is every bit as cut off as
+  // one fenced by dead cells. Counting only dead cells here let a wall-sealed
+  // pocket of dogs pass validation with no bones it could ever reach.
+  it('finds two islands either side of a wall band', () => {
+    const parts = islands(specFromAscii(['...', '###', '...']));
+    expect(parts).toHaveLength(2);
+    expect(parts.map((p) => p.size)).toEqual([3, 3]);
+  });
+
+  it('counts a bee as a fence too', () => {
+    expect(islands(specFromAscii(['.*.', '.*.']))).toHaveLength(2);
+  });
+
+  it('does not count blocks, which are there to be slid out of the way', () => {
+    expect(islands(specFromAscii(['.a.', '.a.']))).toHaveLength(1);
   });
 });
 
@@ -83,48 +110,43 @@ describe('dogsRemaining', () => {
   });
 });
 
-describe('a group is a connected run within an authored id', () => {
-  it('splits one painted colour into separate groups where it is not touching', () => {
+describe('a group is one object, and the board is a list of them', () => {
+  it('makes two shapes out of one letter painted in two places', () => {
     const b = boardFromAscii(['aa.a', '....']);
-    expect(b.groups.size).toBe(2);
-    expect(b.groups.has('a')).toBe(false);
-    expect(b.units.get(0)!.group).toBe(b.units.get(1)!.group);
-    expect(b.units.get(3)!.group).not.toBe(b.units.get(0)!.group);
+    expect(b.groups).toHaveLength(2);
+    expect(b.unitAt.get(0)).toBe(b.unitAt.get(1));
+    expect(b.unitAt.get(3)).not.toBe(b.unitAt.get(0));
   });
 
-  it('keeps the authored id when the colour is already one piece', () => {
-    const b = boardFromAscii(['aa..', '....']);
-    expect([...b.groups.keys()]).toEqual(['a']);
+  it('is one group when the letter is already one piece', () => {
+    expect(boardFromAscii(['aa..', '....']).groups).toHaveLength(1);
   });
 
-  it('treats a colour touching only at a corner as two groups', () => {
-    const b = boardFromAscii(['a...', '.a..']);
-    expect(b.groups.size).toBe(2);
+  it('treats a letter touching only at a corner as two groups', () => {
+    expect(boardFromAscii(['a...', '.a..']).groups).toHaveLength(2);
   });
 
   it('slides the two lumps independently', () => {
     const b = boardFromAscii(['aa.a', '....']);
-    const left = b.units.get(0)!.group;
-    stepGroup(b, left, 0, 1);
-    expect(toAscii(b)).toEqual(['...a', 'aa..']);
+    stepGroup(b, b.unitAt.get(0)!, 0, 1);
+    expect(toAscii(b)).toEqual(['...b', 'aa..']);
   });
 
-  it('keeps two different colours apart even when they touch', () => {
+  it('keeps two different letters apart even when they touch', () => {
     const b = boardFromAscii(['aab.', '....']);
-    expect(b.groups.size).toBe(2);
-    expect(b.units.get(1)!.group).not.toBe(b.units.get(2)!.group);
+    expect(b.groups).toHaveLength(2);
+    expect(b.unitAt.get(1)).not.toBe(b.unitAt.get(2));
   });
 
   it('makes them one group once the gap is painted in', () => {
     const joined = boardFromAscii(['aaaa', '....']);
-    expect(joined.groups.size).toBe(1);
-    expect([...joined.groups.values()][0].size).toBe(4);
+    expect(joined.groups).toHaveLength(1);
+    expect(joined.groups[0].cells.size).toBe(4);
   });
 
   it('carries bones with whichever lump owns them', () => {
     const b = boardFromAscii(['aA.A', '....']);
-    const left = b.units.get(0)!.group;
-    stepGroup(b, left, 0, 1);
+    stepGroup(b, b.unitAt.get(0)!, 0, 1);
     expect(b.bones.has(4)).toBe(false);
     expect(b.bones.get(5)).toEqual({ count: 1, order: 1 });
     expect(b.bones.get(3)).toEqual({ count: 1, order: 1 });   // the far lump did not move
@@ -132,38 +154,38 @@ describe('a group is a connected run within an authored id', () => {
 });
 
 describe('the bone map', () => {
-  it('holds every bone by cell, off the unit', () => {
+  it('holds every bone by cell, off the block', () => {
     const b = boardFromAscii(['aA..', '....']);
-    expect(b.units.get(1)!.group).toBe('a');
+    expect(b.unitAt.get(1)).toBe(b.groups[0]);
     expect(b.bones.get(1)).toEqual({ count: 1, order: 1 });
     expect(b.bones.has(0)).toBe(false);
     expect(bonesRemaining(b)).toBe(1);
   });
 
-  it('takeBone decrements a stack and leaves the unit standing', () => {
+  it('takeBone decrements a stack and leaves the block standing', () => {
     const b = boardFromAscii(['aA..', '....']);
     b.bones.set(1, { count: 3, order: 1 });
-    expect(takeBone(b, 1)).toEqual({ bonesLeft: 2, destroyed: false, groups: ['a'] });
-    expect(b.units.has(1)).toBe(true);
+    expect(takeBone(b, 1)).toEqual({ bonesLeft: 2, destroyed: false, groups: [b.groups[0]] });
+    expect(b.unitAt.has(1)).toBe(true);
   });
 
-  it('takeBone removes the host unit with the last bone', () => {
-    // A lone unit: taking its only bone drops its group entirely, not just re-splits it.
+  it('takeBone removes the host block with the last bone', () => {
+    // A lone block: taking its only bone drops its group entirely, not just re-splits it.
     const b = boardFromAscii(['A..', '...']);
     expect(takeBone(b, 0)).toEqual({ bonesLeft: 0, destroyed: true, groups: [] });
-    expect(b.units.has(0)).toBe(false);
+    expect(b.unitAt.has(0)).toBe(false);
     expect(b.bones.has(0)).toBe(false);
   });
 
   it('takeBone reports the groups a split left behind', () => {
-    // a bridge unit at cell 1 holding two lumps together
+    // a bridge block at cell 1 holding two lumps together
     const b = boardFromAscii(['aAa.', '....']);
     const out = takeBone(b, 1);
     expect(out.destroyed).toBe(true);
     expect(out.groups).toHaveLength(2);
   });
 
-  it('takeBone on a bone with no unit under it just clears the cell', () => {
+  it('takeBone on a bone with no block under it just clears the cell', () => {
     const b = boardFromAscii(['....', '....']);
     b.bones.set(1, { count: 1, order: 1 });
     expect(takeBone(b, 1)).toEqual({ bonesLeft: 0, destroyed: false, groups: [] });

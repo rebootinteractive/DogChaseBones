@@ -24,12 +24,10 @@
     "minCellSize": 10,
     "maxCellSize": 84,
     "panelWidth": 340,
-    "$groupTints": "Block-group colours in the editor only - the game paints every group with colors.block. Add as many as you like; once the list runs out it is reused at a different lightness rather than starting over, so groups stay tellable apart.",
+    "$groupTints": "Block-group colours in the editor only - the game paints every group with colors.block. Eight hues, kept at least 30 degrees apart: a longer list only makes neighbours look alike, which is worse than reusing one. When the list runs out it comes round again at a different lightness AND with a hatch pattern on the tiles, so a thirtieth shape is still its own.",
     "groupTints": [
-      "#e0553f", "#e08a2f", "#d8b23a", "#a8c23a",
-      "#6cc24a", "#3fbf7a", "#2fb8a8", "#35a8d8",
-      "#4d96ff", "#6f7fe8", "#9a6be0", "#c063d8",
-      "#e05aa8", "#e0577a", "#b0785a", "#8f9bb3"
+      "#e5484d", "#f08a2c", "#a8cc32", "#35bf62",
+      "#25c1d4", "#4d8dfa", "#a565ea", "#ef58a6"
     ]
   },
 

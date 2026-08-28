@@ -144,10 +144,35 @@ body.editor-mode #phone {
 
 .group-chip {
   appearance: none; border: 2px solid transparent; border-radius: 9px;
-  padding: 5px 10px; font-size: 12px; font-weight: 600; color: #1c1f2a; cursor: pointer;
+  padding: 5px 8px 5px 10px; font-size: 12px; font-weight: 600; color: #1c1f2a; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
 }
 .group-chip.active { border-color: #fff; }
 .group-chip.new { background: rgba(255,255,255,.1); color: #c9cfe0; }
+
+/* The second channel for telling shapes apart, once the sixteen hues wrap.
+   Mirrors the hatching drawn on the tiles themselves, so a chip and its blocks
+   always look like the same thing. */
+.group-chip.fill-stripe {
+  background-image: repeating-linear-gradient(
+    45deg, rgba(0,0,0,.42) 0 2px, transparent 2px 6px);
+}
+.group-chip.fill-cross {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(0,0,0,.42) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(-45deg, rgba(0,0,0,.42) 0 2px, transparent 2px 6px);
+}
+.group-chip.fill-dot {
+  background-image: radial-gradient(rgba(0,0,0,.45) 1.4px, transparent 1.5px);
+  background-size: 6px 6px;
+}
+
+.chip-count { font-style: normal; font-size: 10px; opacity: .72; font-variant-numeric: tabular-nums; }
+.chip-del {
+  font-style: normal; font-size: 13px; line-height: 1; opacity: .5;
+  padding: 1px 3px; border-radius: 5px;
+}
+.chip-del:hover { opacity: 1; background: rgba(0,0,0,.22); }
 
 /* Tier chips carry no colour of their own -- unlike group chips, which are
    tinted inline -- so selected and unselected have to differ by fill, not just

@@ -2,6 +2,8 @@ import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Plugin, ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { formatLevelJson } from '../src/levels/serialize';
+import type { LevelData } from '../src/shared/types';
 
 const ENDPOINT = '/__repo-levels';
 const DIR = 'src/levels/published';
@@ -49,7 +51,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, dir: string) {
 
     // A fresh clone has no published/ directory until the first level is written.
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, file), `${JSON.stringify(body.level, null, 2)}\n`, 'utf8');
+    await writeFile(join(dir, file), `${formatLevelJson(body.level as LevelData)}\n`, 'utf8');
 
     // A rename moves the file rather than leaving the old one orphaned.
     const previous = typeof body.previousFile === 'string' ? body.previousFile : '';

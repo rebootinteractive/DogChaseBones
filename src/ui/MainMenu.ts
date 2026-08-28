@@ -3,6 +3,7 @@ import type { LevelLibrary } from '../levels/library';
 import type { SourceId } from '../levels/sources/types';
 import { countBones, countDogs, parseLevel } from '../game/level';
 import { exportFileName, exportPayload } from '../levels/exportLevel';
+import { formatLevelJson } from '../levels/serialize';
 import { ServerSource } from '../levels/sources/server';
 
 export interface MenuOptions {
@@ -293,7 +294,7 @@ export class MainMenu {
       // first of a batch raises a permission prompt that has to be answered.
       this.timers.push(setTimeout(() => {
         if (this.disposed || !this.root.isConnected) return;
-        const json = JSON.stringify(exportPayload(level), null, 2);
+        const json = formatLevelJson(exportPayload(level));
         const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
         const a = document.createElement('a');
         a.href = url;

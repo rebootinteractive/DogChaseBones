@@ -1,7 +1,7 @@
-import { queuesOf } from '../src/game/board';
+import { queuesOf, destroyCell } from '../src/game/board';
 import { describe, it, expect } from 'vitest';
 import { beeReach, findRoute } from '../src/game/pathing';
-import { boardFromAscii } from './helpers';
+import { boardFromAscii} from './helpers';
 
 describe('beeReach', () => {
   it('floods every open cell it can get to', () => {
@@ -153,8 +153,7 @@ describe('bone tiers', () => {
     const b = boardFromAscii(['.A..', '.B..'], [{ c: 0, r: 0, dir: 'up', count: 1 }]);
     b.bones.get(1)!.order = 2;
     b.bones.delete(5);
-    b.units.delete(5);
-    b.groups.delete('b');
+    destroyCell(b, 5);
     expect(findRoute(b, queuesOf(b)[0], new Set(), noClaims)!.boneCell).toBe(1);
   });
 

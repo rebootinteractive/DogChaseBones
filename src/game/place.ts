@@ -1,4 +1,4 @@
-import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
+import { colOf, idx, inBounds, rowOf } from './cells';
 
 /**
  * Free placement, for the editor only. The game slides a group cell by cell and
@@ -16,8 +16,8 @@ export interface PlacementBoard {
   bones: Set<number>;
   /** Cells holding a dog standing on the board. */
   dogs: Set<number>;
-  /** cell -> group id */
-  units: Map<number, string>;
+  /** Cells a block group holds. Only membership is read, never the value. */
+  units: ReadonlyMap<number, unknown>;
 }
 
 export interface Placement {
@@ -33,7 +33,7 @@ export interface Placement {
 /**
  * Where would `cells` land if shifted by (dc, dr), and would that work?
  * Only the cells being moved count as vacated, so a group may slide over its
- * own footprint but never onto a separate lump that shares its colour.
+ * own footprint but never onto a different group.
  */
 export function evaluatePlacement(
   board: PlacementBoard,
@@ -59,8 +59,8 @@ export function evaluatePlacement(
     const target = idx(board.cols, c, r);
     targets.push(target);
 
-    // Only the cells actually being moved count as vacated. Another lump that
-    // happens to share this one's colour is a different group, so it blocks.
+    // Only the cells actually being moved count as vacated. Every other group
+    // blocks, however it happens to be coloured.
     const taken =
       board.dead.has(target) ||
       board.walls.has(target) ||
@@ -73,33 +73,4 @@ export function evaluatePlacement(
   }
 
   return { targets, blocked, offGrid, ok: !offGrid && blocked.length === 0 };
-}
-
-/**
- * The connected run of same-id block cells containing `cell` -- one actual
- * group. Two lumps sharing an id but not touching come back separately.
- * Empty when there is no block there.
- */
-export function componentAt(board: PlacementBoard, cell: number): number[] {
-  const group = board.units.get(cell);
-  if (group === undefined) return [];
-
-  const seen = new Set<number>([cell]);
-  const stack = [cell];
-  while (stack.length) {
-    const cur = stack.pop()!;
-    const c = colOf(board.cols, cur);
-    const r = rowOf(board.cols, cur);
-    for (const d of DIRS) {
-      const { dc, dr } = DIR_VEC[d];
-      const nc = c + dc;
-      const nr = r + dr;
-      if (!inBounds(board.cols, board.rows, nc, nr)) continue;
-      const n = idx(board.cols, nc, nr);
-      if (seen.has(n) || board.units.get(n) !== group) continue;
-      seen.add(n);
-      stack.push(n);
-    }
-  }
-  return [...seen].sort((a, b) => a - b);
 }

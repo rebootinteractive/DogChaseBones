@@ -13,7 +13,7 @@ here exists to stop those two quietly disagreeing.
   "prototype": "dog-chase-bones", // which game this level belongs to
   "elements": [ /* see below */ ],
   "meta": {
-    "schema": 2,                  // edition of this format — read this first
+    "schema": 3,                  // edition of this format — read this first
     "cols": 6,
     "rows": 7,
     "timeLimit": 120
@@ -23,14 +23,14 @@ here exists to stop those two quietly disagreeing.
 
 `x` and `y` on every element are **integer cell coordinates**, not pixels and
 not normalized — the camera fits the grid at runtime, so a fraction of the
-screen would mean nothing.
+screen would mean nothing. Origin is the top left; `y` grows downwards.
 
 | element | fields | meaning |
 | --- | --- | --- |
-| `dead` | `x, y` | cell switched off; how a level gets more than one island |
+| `dead` | `x, y` | cell switched off; not part of the board at all |
 | `wall` | `x, y` | static, unmovable, blocks everything |
 | `bee` | `x, y` | fixed; poisons every cell it can reach |
-| `block` | `x, y, group` | one unit block painted with colour `group` |
+| `block` | `x, y, cells` | **one whole block group.** `x, y` is the anchor, `cells` are `[dx, dy]` offsets from it |
 | `bone` | `x, y, count?, order?` | rides the block in the same cell; `count` defaults to 1 |
 | `gridBone` | `x, y, count?, order?` | sits on the grid itself; blocks everything until eaten |
 | `gridDog` | `x, y` | a dog standing on the board; blocks everything until it eats |
@@ -38,14 +38,56 @@ screen would mean nothing.
 
 `dir` is one of `up`, `right`, `down`, `left`.
 
-A **group** is a *connected run of same-coloured blocks*, not the colour itself.
-Two lumps painted the same colour but not touching are two separate groups. Any
-reader must compute connected components rather than grouping by colour.
-
 A `gridBone` owns its cell outright: it is dropped if anything else already
 holds that cell, where an ordinary `bone` is dropped if a block does *not*.
 A `gridDog` carries no count — one element is one dog, because a stack of dogs
 on one cell would have nowhere to stand.
+
+A queue is the one element exempt from cell occupancy: its entry cell may also
+hold a block, a bone or a wall, because the dogs themselves wait *off* the board
+beyond it. `validateLevel` warns about the ones that make the queue useless.
+
+## `block` — one element is one group
+
+```jsonc
+{ "type": "block", "x": 3, "y": 1, "cells": [[0,0],[1,0],[2,0],[2,1]] }
+```
+
+The anchor is the group's **first cell in reading order** — lowest row, then
+lowest column. So `cells` always contains `[0,0]`, every `dy` is `>= 0`, and
+`dx` is negative only on a lower row. Offsets are written in reading order.
+One shape in one position therefore has exactly one valid encoding, which keeps
+diffs small and makes a round trip testable. `blockElement` in
+`src/levels/serialize.ts` is the only encoder; the editor and the migration both
+call it.
+
+`cells` is required even for a single-cell group (`[[0,0]]`), so a reader needs
+no special case.
+
+**A group has no id, and does not need one.** It is one element in the file and
+one object at runtime, held in a plain list. When a block is eaten and the
+remainder falls into pieces, the original object keeps one part and the others
+are *pushed onto the list as new objects* — nothing is renamed, and a reference
+taken before a split is still a live handle afterwards. A Unity port should do
+the same: a group is a GameObject, a split is an `Instantiate`. Never store a
+group id on a block; recompute membership from the group it belongs to.
+
+What the parser does with a `block` it cannot take at face value — Unity has to
+match these exactly:
+
+| situation | result |
+| --- | --- |
+| `cells` missing or empty | shape dropped, issue reported |
+| duplicate offsets | deduplicated |
+| any cell off the grid | **whole shape** dropped — dropping just the strays could silently disconnect the rest |
+| any cell on a `dead` cell | whole shape dropped, same reasoning |
+| shape not 4-connected | split into its connected pieces, issue reported |
+| cell already taken by an earlier element | that cell is lost (and the shape splits if it was the bridge) |
+
+`dead` elements are collected **before** anything else, so whether a shape
+overlaps one never depends on where the `dead` element sits in the array.
+Everything else is decided in array order: the first element to claim a cell
+keeps it.
 
 ## `order` — bone tiers
 
@@ -89,10 +131,23 @@ so does a level whose `schema` is unreadable — the fallback is deliberately th
 
 **Edition 2** added bone tiers (`order`) and the `gridBone` and `gridDog`
 elements. An edition-1 level is a valid edition-2 level with every bone on
-tier 1, which is why the reader needs no migration step. Committed level files
-are *not* expected to be the current edition — `tests/published.test.ts` checks
-each one declares an edition this build understands, not that it matches
-`SCHEMA_VERSION`.
+tier 1, so no migration step was needed.
+
+**Edition 3** replaced the per-cell `block` element with the whole-group one
+above, and deleted `group` and `colorKey`. Editions 1 and 2 still *open* — their
+`group` tags are split into connected components on the way in, which is exactly
+what the runtime always did with them — so nothing in localStorage or on the
+server breaks. The editor only ever writes edition 3.
+
+Edition 3 is not backwards compatible in the other direction, which is the
+point: an edition-2 reader handed a `block` with no `group` would have loaded a
+board full of accidental singletons and played it wrong. A build reading
+edition 3 also refuses a `block` that still carries only a tag, rather than
+guessing it means one cell.
+
+Committed level files are *not* expected to be the current edition —
+`tests/published.test.ts` checks each one declares an edition this build
+understands, not that it matches `SCHEMA_VERSION`.
 
 ## Where levels live — three separate places
 

@@ -3,6 +3,8 @@ import { SETTINGS } from '../game/settings';
 import { colOf, rowOf } from '../game/cells';
 import { cellX, cellY } from '../game/camera';
 import type { Camera } from '../game/camera';
+import { shadeColor } from './color';
+import type { GroupFill } from './color';
 
 const C = SETTINGS.colors;
 const L = SETTINGS.layout;
@@ -31,10 +33,19 @@ export function drawWall(g: Graphics, cam: Camera, cell: number) {
 }
 
 /**
- * A block group reads as one piece: every unit gets a rounded tile, and the
- * seam between two units of the same group is bridged so the outline is shared.
+ * A block group reads as one piece: every cell gets a rounded tile, and the
+ * seam between two cells of the same group is bridged so the outline is shared.
+ *
+ * `fill` is the editor's second channel for telling groups apart once the hue
+ * palette wraps. The game always passes 'solid'.
  */
-export function drawBlockGroup(g: Graphics, cam: Camera, cells: Set<number>, color: number = C.block) {
+export function drawBlockGroup(
+  g: Graphics,
+  cam: Camera,
+  cells: Set<number>,
+  color: number = C.block,
+  fill: GroupFill = 'solid',
+) {
   const i = L.blockInset;
   const s = cam.cell - i * 2;
 
@@ -56,6 +67,44 @@ export function drawBlockGroup(g: Graphics, cam: Camera, cells: Set<number>, col
     }
     if (r + 1 < cam.rows && cells.has(cell + cam.cols)) {
       g.rect(x + 2, y + s - bridge, s - 4, cam.cell - s + bridge * 2).fill({ color });
+    }
+  }
+
+  if (fill === 'solid') return;
+
+  // Hatching, drawn inside each tile so no clipping is needed. It sits under
+  // the bones and badges, which are painted afterwards.
+  const ink = shadeColor(color, -0.42);
+  const pad = s * 0.16;
+  const span = s - pad * 2;
+  const width = Math.max(1.2, s * 0.055);
+
+  for (const cell of cells) {
+    const x = cellX(cam, cell) + i;
+    const y = cellY(cam, cell) + i;
+
+    // Dots read as nothing like the two line patterns, which is the point --
+    // the fourth fill has to differ from the others at a glance, not just from
+    // solid.
+    if (fill === 'dot') {
+      const r = Math.max(1.4, s * 0.085);
+      for (const fx of [0.25, 0.75]) {
+        for (const fy of [0.25, 0.75]) {
+          g.circle(x + pad + span * fx, y + pad + span * fy, r).fill({ color: ink, alpha: 0.8 });
+        }
+      }
+      continue;
+    }
+
+    for (const t of [0.28, 0.58, 0.88]) {
+      // '\' running top-left to bottom-right, anchored on the tile diagonal.
+      g.moveTo(x + pad, y + pad + span * t)
+        .lineTo(x + pad + span * t, y + pad)
+        .stroke({ width, color: ink, alpha: 0.75 });
+      if (fill !== 'cross') continue;
+      g.moveTo(x + s - pad, y + pad + span * t)
+        .lineTo(x + s - pad - span * t, y + pad)
+        .stroke({ width, color: ink, alpha: 0.75 });
     }
   }
 }
@@ -153,4 +202,13 @@ export function drawVacatedCell(g: Graphics, cam: Camera, cell: number) {
 /** Backing disc for a stacked-bone count, so the number reads over the bone. */
 export function drawBonePip(g: Graphics, cx: number, cy: number, r: number) {
   g.circle(cx, cy, r).fill({ color: C.badgeFill }).stroke({ width: 1.2, color: C.bone, alpha: 0.9 });
+}
+
+/** Editor: the shape the Block tool is painting into. */
+export function drawSelectedCell(g: Graphics, cam: Camera, cell: number) {
+  const x = cellX(cam, cell);
+  const y = cellY(cam, cell);
+  const i = L.blockInset;
+  g.roundRect(x + i, y + i, cam.cell - i * 2, cam.cell - i * 2, L.blockRadius)
+    .stroke({ width: 2, color: C.editorGuide, alpha: 0.95 });
 }

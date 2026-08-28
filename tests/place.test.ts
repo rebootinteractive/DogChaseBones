@@ -1,15 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { componentAt, evaluatePlacement } from '../src/game/place';
+import { evaluatePlacement } from '../src/game/place';
 import type { PlacementBoard } from '../src/game/place';
 
-/** Same ASCII convention as the other suites, flattened to an editor board. */
-function board(rows: string[]): PlacementBoard {
+/**
+ * Same ASCII convention as the other suites, flattened to an editor board.
+ * The letter is only a way of saying which cells belong to which shape here --
+ * `units` maps a cell to whatever object owns it, and only membership is read.
+ */
+function board(rows: string[]): { board: PlacementBoard; cellsOf: (letter: string) => number[] } {
   const cols = rows[0].length;
+  const owners = new Map<string, object>();
+  const cells = new Map<string, number[]>();
   const b: PlacementBoard = {
     cols, rows: rows.length,
     dead: new Set(), walls: new Set(), bees: new Set(),
-    bones: new Set(), dogs: new Set(), units: new Map(),
+    bones: new Set(), dogs: new Set(), units: new Map<number, unknown>(),
   };
+  const units = b.units as Map<number, unknown>;
   rows.forEach((row, r) => [...row].forEach((ch, c) => {
     const cell = r * cols + c;
     if (ch === '#') b.walls.add(cell);
@@ -17,16 +24,20 @@ function board(rows: string[]): PlacementBoard {
     else if (ch === '*') b.bees.add(cell);
     else if (ch === '+') b.bones.add(cell);
     else if (ch === '@') b.dogs.add(cell);
-    else if (/[a-z]/.test(ch)) b.units.set(cell, ch);
+    else if (/[a-z]/.test(ch)) {
+      let owner = owners.get(ch);
+      if (!owner) { owner = {}; owners.set(ch, owner); cells.set(ch, []); }
+      units.set(cell, owner);
+      cells.get(ch)!.push(cell);
+    }
   }));
-  return b;
+  return { board: b, cellsOf: (letter) => cells.get(letter) ?? [] };
 }
 
-/** Grab the lump containing the first cell of `group` and shift it. */
-const move = (rows: string[], group: string, dc: number, dr: number) => {
-  const b = board(rows);
-  const start = [...b.units].find(([, g]) => g === group)?.[0] ?? -1;
-  return evaluatePlacement(b, componentAt(b, start), dc, dr);
+/** Shift every cell painted with `letter`. */
+const move = (rows: string[], letter: string, dc: number, dr: number) => {
+  const { board: b, cellsOf } = board(rows);
+  return evaluatePlacement(b, cellsOf(letter), dc, dr);
 };
 
 describe('evaluatePlacement', () => {
@@ -79,47 +90,17 @@ describe('evaluatePlacement', () => {
   });
 });
 
-describe('componentAt', () => {
-  it('returns the touching run, not everything sharing the colour', () => {
-    const b = board(['aa.a', '....']);
-    expect(componentAt(b, 0)).toEqual([0, 1]);
-    expect(componentAt(b, 3)).toEqual([3]);
-  });
-
-  it('follows the lump around corners', () => {
-    const b = board(['aa..', '.a..', '.aa.']);
-    expect(componentAt(b, 0)).toEqual([0, 1, 5, 9, 10]);
-  });
-
-  it('stops at a different colour even when they touch', () => {
-    const b = board(['aab.', '....']);
-    expect(componentAt(b, 0)).toEqual([0, 1]);
-    expect(componentAt(b, 2)).toEqual([2]);
-  });
-
-  it('is empty where there is no block', () => {
-    expect(componentAt(board(['a...', '....']), 2)).toEqual([]);
-    expect(componentAt(board(['a...', '....']), -1)).toEqual([]);
-  });
-});
-
-describe('two lumps sharing one colour', () => {
-  it('will not let one lump be dropped onto the other', () => {
-    const p = move(['aa.a', '....'], 'a', 2, 0);
+describe('a shape lands as one piece or not at all', () => {
+  it('reports every cell that will not fit', () => {
+    const p = move(['aa..', '..b.'], 'a', 1, 1);
     expect(p.ok).toBe(false);
-    expect(p.blocked).toEqual([3]);
-  });
-
-  it('lets a lump move somewhere the other one is not', () => {
-    const p = move(['aa.a', '....'], 'a', 0, 1);
-    expect(p.ok).toBe(true);
-    expect(p.targets).toEqual([4, 5]);
+    expect(p.blocked).toEqual([6]);
   });
 });
 
 describe('grid bones and grid dogs block a drop', () => {
   it('refuses either, and allows the bare cell between them', () => {
-    const b = board(['a.+@']);
+    const { board: b } = board(['a.+@']);
     expect(evaluatePlacement(b, [0], 2, 0).ok).toBe(false);   // onto the grid bone
     expect(evaluatePlacement(b, [0], 3, 0).ok).toBe(false);   // onto the grid dog
     expect(evaluatePlacement(b, [0], 1, 0).ok).toBe(true);

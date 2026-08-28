@@ -1,10 +1,21 @@
-import { DIR_VEC, DIRS, colOf, idx, inBounds, rowOf } from './cells';
+import { DIRS, DIR_VEC, colOf, connectedComponents, idx, inBounds, rowOf } from './cells';
 import type { Dir } from './cells';
 import type { BoneStack, LevelSpec } from './level';
 
-export interface Unit {
-  group: string;
-  colorKey?: string;
+export { connectedComponents };
+
+/**
+ * One block group: the cells it occupies, and nothing else.
+ *
+ * A group has no id. It *is* the object -- two groups are different because
+ * they are different objects, not because they carry different strings. That
+ * matters because a group splits during play: the piece that loses the block
+ * holding it together keeps one part, and the other parts become new objects
+ * pushed onto the board's list. Nothing is renamed, so a reference taken before
+ * a split is still a valid handle on a real piece afterwards.
+ */
+export interface BlockGroup {
+  cells: Set<number>;
 }
 
 /**
@@ -34,16 +45,21 @@ export interface BoardState {
   dead: Set<number>;
   walls: Set<number>;
   bees: Set<number>;
-  units: Map<number, Unit>;
+  /** Every block group on the board, in no particular order. */
+  groups: BlockGroup[];
+  /**
+   * Which group holds each cell. A derived index over `groups`, kept in step by
+   * the same functions that move cells -- `isBlocked` runs hot and needs a cell
+   * lookup, but `groups` stays the only place a piece lives.
+   */
+  unitAt: Map<number, BlockGroup>;
   /** Every bone by cell, riding a block or sitting on the grid. */
   bones: Map<number, BoneStack>;
-  groups: Map<string, Set<number>>;
   /** Every dog still to walk -- queues, and dogs standing on the board. */
   sources: DogSource[];
   /**
    * Cells held by a grid dog. A derived index over `sources`, rebuilt rather
-   * than patched so it can never drift -- `isBlocked` runs hot and needs a cell
-   * lookup, but `sources` stays the only place a grid dog lives.
+   * than patched so it can never drift.
    */
   gridDogs: Set<number>;
   walkers: Walker[];
@@ -51,33 +67,13 @@ export interface BoardState {
   reserved: Set<number>;
 }
 
-/**
- * A group is a *connected component within an authored id*, not the id itself.
- * Two lumps painted the same colour but not touching are two separate groups
- * and slide independently; make them touch in the editor and they become one.
- * Two different ids that touch stay separate, which is what the id is for.
- */
 export function createBoard(spec: LevelSpec): BoardState {
-  const units = new Map<number, Unit>();
-  const authored = new Map<string, Set<number>>();
-  for (const u of spec.units) {
-    const unit: Unit = { group: u.group };
-    if (u.colorKey !== undefined) unit.colorKey = u.colorKey;
-    units.set(u.cell, unit);
-    let set = authored.get(u.group);
-    if (!set) { set = new Set(); authored.set(u.group, set); }
-    set.add(u.cell);
-  }
-
-  const groups = new Map<string, Set<number>>();
-  for (const [id, cells] of authored) {
-    const parts = connectedComponents(spec.cols, spec.rows, cells);
-    parts.forEach((part, n) => {
-      // Keep the authored id when it is already one piece, so level ids stay readable.
-      const gid = parts.length === 1 ? id : `${id}#${n}`;
-      groups.set(gid, part);
-      for (const cell of part) units.get(cell)!.group = gid;
-    });
+  const groups: BlockGroup[] = [];
+  const unitAt = new Map<number, BlockGroup>();
+  for (const cells of spec.shapes) {
+    const group: BlockGroup = { cells: new Set(cells) };
+    groups.push(group);
+    for (const cell of group.cells) unitAt.set(cell, group);
   }
 
   return {
@@ -86,9 +82,9 @@ export function createBoard(spec: LevelSpec): BoardState {
     dead: new Set(spec.dead),
     walls: new Set(spec.walls),
     bees: new Set(spec.bees),
-    units,
-    bones: new Map([...spec.bones].map(([cell, s]) => [cell, { ...s }])),
     groups,
+    unitAt,
+    bones: new Map([...spec.bones].map(([cell, s]) => [cell, { ...s }])),
     sources: [
       ...spec.queues.map((q): DogSource => ({ kind: 'queue', id: q.id, cell: q.cell, dir: q.dir, remaining: q.count })),
       ...spec.gridDogs.map((cell, n): DogSource => ({ kind: 'grid', id: `d${n}`, cell })),
@@ -105,7 +101,7 @@ export function isBlocked(state: BoardState, cell: number): boolean {
     state.dead.has(cell) ||
     state.walls.has(cell) ||
     state.bees.has(cell) ||
-    state.units.has(cell) ||
+    state.unitAt.has(cell) ||
     state.bones.has(cell) ||
     state.gridDogs.has(cell) ||
     state.reserved.has(cell)
@@ -117,10 +113,6 @@ export function isPassable(state: BoardState, cell: number): boolean {
   return cell >= 0 && cell < state.cols * state.rows && !isBlocked(state, cell);
 }
 
-export function groupCells(state: BoardState, group: string): number[] {
-  return [...(state.groups.get(group) ?? [])];
-}
-
 /** Cell just outside the grid-facing side of a queue, `n` dogs back. */
 export function queueSlot(state: BoardState, q: RuntimeQueue, n: number): { c: number; r: number } {
   const { dc, dr } = DIR_VEC[q.dir];
@@ -129,7 +121,8 @@ export function queueSlot(state: BoardState, q: RuntimeQueue, n: number): { c: n
 
 /**
  * A queue is well-formed when its outward neighbour is off-grid or dead --
- * that is what makes its cell a boundary the dogs can walk in from.
+ * that is what makes its cell a boundary the dogs can walk in from. A wall does
+ * not count: dogs come from outside the board, and a wall is inside it.
  */
 export function isBoundaryFor(spec: { cols: number; rows: number; dead: Set<number> }, cell: number, dir: Dir): boolean {
   const { dc, dr } = DIR_VEC[dir];
@@ -145,71 +138,53 @@ export function boundaryDirs(spec: { cols: number; rows: number; dead: Set<numbe
 }
 
 /**
- * Remove one unit and re-split its group into connected components.
- * Returns the group ids that exist afterwards where the old one was.
+ * Take one cell out of the board and, if that leaves its group in pieces, break
+ * the group up. The original object keeps one part; every other part becomes a
+ * new group pushed onto `state.groups`.
+ *
+ * Returns the groups that exist where the old one was: empty when the last cell
+ * went, one when it held together, more than one when it split.
  */
-export function removeUnit(state: BoardState, cell: number): string[] {
-  const unit = state.units.get(cell);
-  if (!unit) return [];
-  state.units.delete(cell);
+export function destroyCell(state: BoardState, cell: number): BlockGroup[] {
+  const group = state.unitAt.get(cell);
+  if (!group) return [];
 
-  const set = state.groups.get(unit.group);
-  if (!set) return [];
-  set.delete(cell);
-  if (set.size === 0) { state.groups.delete(unit.group); return []; }
+  group.cells.delete(cell);
+  state.unitAt.delete(cell);
 
-  const components = connectedComponents(state.cols, state.rows, set);
-  if (components.length <= 1) return [unit.group];
+  if (group.cells.size === 0) {
+    state.groups = state.groups.filter((g) => g !== group);
+    return [];
+  }
 
-  // The bridge unit is gone -- the group falls apart into independent groups.
-  state.groups.delete(unit.group);
-  const ids: string[] = [];
-  components.forEach((comp, n) => {
-    const id = `${unit.group}#${n}`;
-    state.groups.set(id, comp);
-    for (const c of comp) {
-      const u = state.units.get(c);
-      if (u) u.group = id;
-    }
-    ids.push(id);
-  });
-  return ids;
-}
+  const parts = connectedComponents(state.cols, state.rows, group.cells);
+  if (parts.length === 1) return [group];
 
-/** 4-adjacency connected components within `cells`. */
-export function connectedComponents(cols: number, rows: number, cells: Set<number>): Set<number>[] {
-  const seen = new Set<number>();
-  const out: Set<number>[] = [];
-  for (const start of cells) {
-    if (seen.has(start)) continue;
-    const comp = new Set<number>([start]);
-    seen.add(start);
-    const stack = [start];
-    while (stack.length) {
-      const cur = stack.pop()!;
-      const c = colOf(cols, cur);
-      const r = rowOf(cols, cur);
-      for (const d of DIRS) {
-        const { dc, dr } = DIR_VEC[d];
-        const nc = c + dc;
-        const nr = r + dr;
-        if (!inBounds(cols, rows, nc, nr)) continue;
-        const n = idx(cols, nc, nr);
-        if (!cells.has(n) || seen.has(n)) continue;
-        seen.add(n);
-        comp.add(n);
-        stack.push(n);
-      }
-    }
-    out.push(comp);
+  // The bridge cell is gone -- the piece falls apart. One part stays with the
+  // original object so anything already holding it keeps a live reference.
+  group.cells = parts[0];
+  const out = [group];
+  for (const part of parts.slice(1)) {
+    const extra: BlockGroup = { cells: part };
+    state.groups.push(extra);
+    for (const c of part) state.unitAt.set(c, extra);
+    out.push(extra);
   }
   return out;
 }
 
-/** Islands of the grid: connected components of the cells that are not dead. */
-export function islands(spec: { cols: number; rows: number; dead: Set<number> }): Set<number>[] {
+/**
+ * Islands of the board: regions nothing can ever travel between. Dead cells,
+ * walls and bees all fence a region off, because none of them ever move --
+ * blocks do not, since sliding one out of the way is the game.
+ */
+export function islands(
+  spec: { cols: number; rows: number; dead: Set<number>; walls: Set<number>; bees: Set<number> },
+): Set<number>[] {
   const live = new Set<number>();
-  for (let i = 0; i < spec.cols * spec.rows; i++) if (!spec.dead.has(i)) live.add(i);
+  for (let i = 0; i < spec.cols * spec.rows; i++) {
+    if (!spec.dead.has(i) && !spec.walls.has(i) && !spec.bees.has(i)) live.add(i);
+  }
   return connectedComponents(spec.cols, spec.rows, live);
 }
 
@@ -232,17 +207,17 @@ export function activeOrder(state: BoardState): number | null {
 
 /**
  * Take one bone off a cell. The single place a bone can disappear, which is
- * what keeps `activeOrder` honest. When the stack empties, the block unit
- * underneath -- if there is one -- goes with it and its group re-splits.
+ * what keeps `activeOrder` honest. When the stack empties, the block underneath
+ * -- if there is one -- goes with it and its group may split.
  */
 export function takeBone(
   state: BoardState,
   cell: number,
-): { bonesLeft: number; destroyed: boolean; groups: string[] } {
+): { bonesLeft: number; destroyed: boolean; groups: BlockGroup[] } {
   const stack = state.bones.get(cell);
   if (!stack) return { bonesLeft: 0, destroyed: false, groups: [] };
 
-  const group = state.units.get(cell)?.group;
+  const group = state.unitAt.get(cell);
 
   stack.count -= 1;
   if (stack.count > 0) {
@@ -250,11 +225,11 @@ export function takeBone(
   }
 
   state.bones.delete(cell);
-  if (group === undefined) return { bonesLeft: 0, destroyed: false, groups: [] };
+  if (!group) return { bonesLeft: 0, destroyed: false, groups: [] };
 
   // The host goes with its last bone -- and if it was the one thing holding its
-  // group together, `removeUnit` reports the groups it fell apart into.
-  return { bonesLeft: 0, destroyed: true, groups: removeUnit(state, cell) };
+  // group together, `destroyCell` reports the groups it fell apart into.
+  return { bonesLeft: 0, destroyed: true, groups: destroyCell(state, cell) };
 }
 
 export function bonesRemaining(state: BoardState): number {

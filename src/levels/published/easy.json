@@ -1,92 +1,66 @@
 {
   "id": "b1-first-bone",
-  "meta": {
-    "cols": 5,
-    "rows": 4,
-    "schema": 1,
-    "timeLimit": 90
-  },
   "name": "Easy",
+  "prototype": "dog-chase-bones",
   "elements": [
     {
-      "x": 3,
-      "y": 1,
       "type": "block",
-      "group": "g2"
-    },
-    {
-      "x": 0,
-      "y": 0,
-      "type": "block",
-      "group": "a"
-    },
-    {
-      "x": 0,
-      "y": 1,
-      "type": "block",
-      "group": "a"
-    },
-    {
-      "x": 1,
-      "y": 1,
-      "type": "block",
-      "group": "a"
-    },
-    {
-      "x": 2,
-      "y": 1,
-      "type": "block",
-      "group": "a"
-    },
-    {
-      "x": 0,
-      "y": 2,
-      "type": "block",
-      "group": "b"
-    },
-    {
-      "x": 1,
-      "y": 2,
-      "type": "block",
-      "group": "b"
-    },
-    {
-      "x": 2,
-      "y": 2,
-      "type": "block",
-      "group": "b"
-    },
-    {
-      "x": 4,
-      "y": 3,
-      "type": "block",
-      "group": "g1"
-    },
-    {
-      "x": 4,
-      "y": 2,
-      "type": "block",
-      "group": "g1"
-    },
-    {
       "x": 3,
       "y": 0,
-      "type": "block",
-      "group": "g2"
+      "cells": [
+        [0, 0],
+        [0, 1]
+      ]
     },
     {
-      "x": 3,
-      "y": 1,
+      "type": "block",
+      "x": 0,
+      "y": 0,
+      "cells": [
+        [0, 0],
+        [0, 1],
+        [1, 1],
+        [2, 1]
+      ]
+    },
+    {
+      "type": "block",
+      "x": 0,
+      "y": 2,
+      "cells": [
+        [0, 0],
+        [1, 0],
+        [2, 0]
+      ]
+    },
+    {
+      "type": "block",
+      "x": 4,
+      "y": 2,
+      "cells": [
+        [0, 0],
+        [0, 1]
+      ]
+    },
+    {
       "type": "bone",
-      "count": 1
+      "x": 3,
+      "y": 1,
+      "count": 1,
+      "order": 1
     },
     {
+      "type": "queue",
       "x": 0,
       "y": 1,
       "dir": "left",
-      "type": "queue",
       "count": 1
     }
   ],
-  "prototype": "dog-chase-bones"
+  "meta": {
+    "schema": 3,
+    "cols": 5,
+    "rows": 4,
+    "timeLimit": 90
+  }
 }
