@@ -14,59 +14,48 @@ release exactly as `GameApp` does -- and marks a state solvable when some path
 from it reaches a win. Everything else is a grave. `tests/softlock.test.ts`
 pins the results below.
 
-## The only ingredient is the bee
+## Two ways to lose a level for good
 
-Sliding is undoable. A group that moved by (dc, dr) can always move straight
-back, because nothing else moved into the cells it left; a drag that causes no
-bite is reversible, so the player can always restore any earlier arrangement.
-The one thing a bite changes for good is that a unit is gone, and a missing
-unit only ever adds free space.
+Both turn on a bite. A bite is the only thing on this board that cannot be
+undone: sliding is reversible -- a group that moved can always move straight
+back, because nothing else moved into the cells it left -- so up to the moment a
+dog eats, the player can always restore any earlier arrangement.
 
-That leaves reachability. Compare `canStepGroup` with `findRoute`: dead cells,
-walls, bee *cells*, units and reservations block a block and a dog alike. The
-single exception is bee *reach*, which stops a dog and does nothing to a block.
-So in a bee-free level every dog sharing a region can reach every bone in that
-region, each bite removes one dog and one bone from the same region, and no
-bite can strand a later dog. There is nothing to get wrong except the clock.
+**1. A bee whose plug carries a bone.** Eating it destroys the block that was
+sealing the flood, and there is no putting it back. See `sl-one-bee`.
 
-Empirically: 1458 randomly generated winnable bee-free levels -- walls, dead
-cells, islands, bone stacks, multi-unit groups, one and two queues -- produced
-**zero** soft locks. The same generator with bees produces them readily.
+**2. A frozen group.** A block group boxed in on all four sides cannot move: it
+is a wall the level never declared. Unlike a wall, a bite can *unfreeze* it,
+because a group that loses a unit is smaller and may suddenly fit where it did
+not. That makes it a one-way door whose key is the bone riding it -- and if only
+one dog can reach that bone, spending that dog anywhere else shuts the door for
+good. No bee involved. See `SoftLock`.
 
-**Rule of thumb: audit bee levels. Bee-free levels cannot be locked.**
+The second one is the dangerous one, because nothing about it looks like a
+hazard. There is no flood painted on the board, no warning in the editor, and
+the group that does the damage is drawn exactly like every other block.
 
-## What edition 2 changed, and what was re-checked
+### A claim this document used to make
 
-Grid bones, grid dogs and bone tiers each touch something the argument above
-rests on, so it was re-run rather than assumed.
+An earlier version of this page argued that a soft lock *required* a bee, on the
+grounds that bee reach is the only obstacle that stops a dog and not a block,
+and that a bite only ever frees space and so can never strand a dog.
 
-- **Grid bones and grid dogs are new immovable obstacles.** Both *vanish* when
-  eaten -- a grid bone when its stack empties, a grid dog when it has fed. So
-  they still only ever add free space, and the reversibility argument survives
-  intact. Neither can appear mid-level, and neither can move.
-- **Ordering changes which bones are targetable over time**, which the argument
-  never considered at all. A locked tier is an obstacle a dog can see and not
-  claim, and the set of claimable bones changes as the board empties.
+Both of those statements are true. The conclusion drawn from them was not, for
+two reasons:
 
-The argument for ordering is that tiers unlock *monotonically*: a tier opens
-when the last lower-tier bone is eaten, eating only ever frees space, and no
-bone can move to a higher tier. So the set of reachable bones only grows. That
-is a plausible argument, and plausible arguments are what this file exists to
-replace.
+- **Blocks do partition the board.** The argument assumed any block can be
+  dragged aside. A frozen group cannot, so two dogs can be in genuinely
+  different regions with no bee anywhere.
+- **Freeing space later is no use to a dog already spent.** A bite really does
+  only open the board up -- but if the bite that opens it is the same bite a
+  particular dog needed, and it goes to another dog, the region opens with
+  nobody left to use it.
 
-Re-run with the new content: **1474 randomly generated winnable bee-free
-levels** -- one to three tiers, grid bones, grid dogs, queued dogs, walls, bone
-stacks and multi-unit groups, on 4x3 and 5x4 boards -- produced **zero** soft
-locks. `sl-tiers` in `tests/softlock.test.ts` pins one deterministic tiered
-board and asserts the same thing.
-
-**The rule of thumb stands, with its scope widened: audit bee levels. Bee-free
-levels still cannot be locked, tiers and grid content included.**
-
-Two caveats worth stating plainly. The sweep is evidence, not proof -- it is a
-random search over small boards, and the earlier 1458-level result was the same
-kind of evidence. And it says nothing about *difficulty*: a tiered level can
-easily be tedious, or unwinnable on the clock, without ever being locked.
+A sweep of ~1,500 random bee-free levels found no locks, which was taken as
+support. It was not: random placement essentially never produces a wall-boxed
+multi-cell bar carrying a bone at its far end with the two queues on opposite
+sides of it. That was evidence about the generator, not about the game.
 
 ## `sl-no-bee` -- the trap that isn't
 
@@ -83,10 +72,12 @@ walks or which bone it takes -- `resolveMoves` sends every leader that has a
 route, and `findRoute` gives it the nearest unclaimed bone. Open `m`'s shaft
 too early and q0's dog crosses the board and eats the bone q1 was waiting for.
 
-It still cannot be locked. Once `B` is gone its cell opens and q1's dog walks
-the same corridor to `A`. The board is 9824 states, none of them dead, and the
-worst possible opening drag costs **one** extra drag out of four. Bee-free
-levels are safe; this one is in the repo as the control case.
+It still cannot be locked -- not because it has no bee, but because nothing in
+it is frozen. Once `B` is gone its cell opens, and any block in the way can be
+dragged aside, so q1's dog walks the same corridor to `A`. The board is 9824
+states, none of them dead, and the worst possible opening drag costs **one**
+extra drag out of four. It is in the repo as the control case: the same theft
+that is merely annoying here is permanent in `SoftLock`.
 
 ## `sl-one-bee` -- one bee, two doors, one plug too few
 
@@ -149,8 +140,48 @@ the same way, and it is the shape a designer is more likely to draw by
 accident: two bees tucked in two corners, two plugs to hand, one of them
 carrying a bone.
 
+## `SoftLock` -- a frozen bar, and no bee
+
+```
+. . . . # # .        g1  a three-wide bar, bone on its right end
+. . . . # . .        g2  one block, one bone
+# . # # # . .        g3  one block, parked on the bottom-right queue's entry
+a a A # B . .
+# . . . . . c        q0 at (0,0) up, 1 dog   ·   q1 at (6,4) right, 1 dog
+```
+
+`g1` is boxed in by walls above at `(0,2)` and `(2,2)`, below at `(0,4)`, right
+at `(3,3)`, and the grid edge on the left. **It cannot step in any direction.**
+It is also the only route between the top-left room and the bottom corridor: the
+top-left dog's region is that room plus `(1,2)`, and the way down from `(1,2)` is
+`(1,3)` -- inside the bar.
+
+So the top-left dog is sealed in, and only the bottom-right dog can reach the
+bone the bar carries, from `(2,4)`. Eating it shrinks the bar to two cells, which
+*can* move, which is what finally lets the other dog out. **That one bite is the
+key to the door.**
+
+**The lock.** `g3` sits on the bottom-right queue's entry cell. The moment it is
+dragged off, that dog is live and takes the nearest bone -- `g2`'s, two steps
+away, the wrong one. The bar keeps its bone, stays frozen, and the top-left dog
+never gets out. **156 of the 306 legal opening drags lose the level outright.**
+
+**The win** is three drags: send `g2`'s bone up to the top-right corner, park
+`g3` in the right column so it walls that corner off, and the bottom-right dog is
+forced left along the corridor onto the bar's bone instead. Then the two-cell
+remnant can be dragged clear -- out of the corridor, not into it, or it just
+becomes the next wall -- and the top-left dog walks the long way round.
+
+> The design rule: **a group that cannot move is a wall, and a bite can turn it
+> into a door.** Check which dogs can reach the key, and whether anything else
+> can spend them first.
+
 ## Authoring checklist
 
+- **Look for frozen groups first.** `frozenGroups` in the analyzer lists every
+  group that cannot move at all. Each one is a wall you did not draw. For each,
+  ask which dogs can reach the bones on it, and whether any other dog can be
+  spent on those bones first.
 - Count the openings a bee can flood through, and count the blocks that can
   plug them. If the numbers are equal, no plug may carry a bone -- eating one
   is what takes a plug off the board permanently.
@@ -166,7 +197,8 @@ carrying a bone.
 
 ## Using the levels
 
-The three levels are JSON in `tests/softlock/levels/`, in the published-level
-format. Drop one into `src/levels/published/` and commit it, or paste it into
-Supabase, to play it. They are wired into `tests/softlock.test.ts` from where
-they sit, so moving them will break that test.
+The three bee levels are JSON in `tests/softlock/levels/`, in the
+published-level format. Drop one into `src/levels/published/` and commit it, or
+paste it into Supabase, to play it. `SoftLock` is already published, at
+`src/levels/published/softlock.json`. All four are wired into
+`tests/softlock.test.ts` from where they sit, so moving them breaks that test.

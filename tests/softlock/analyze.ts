@@ -3,7 +3,7 @@ import { parseLevel } from '../../src/game/level';
 import { createBoard } from '../../src/game/board';
 import type { BoardState } from '../../src/game/board';
 import { finishWalker, isWon, resolveMoves } from '../../src/game/resolve';
-import { stepGroup } from '../../src/game/slide';
+import { canStepGroup, slideGroupBy, stepGroup } from '../../src/game/slide';
 import { DIRS, DIR_VEC, colOf, rowOf } from '../../src/game/cells';
 import type { Dir } from '../../src/game/cells';
 
@@ -33,7 +33,7 @@ export function cloneState(s: BoardState): BoardState {
     units: new Map([...s.units].map(([c, u]) => [c, { ...u }])),
     bones: new Map([...s.bones].map(([c, b]) => [c, { ...b }])),
     groups: new Map([...s.groups].map(([g, cells]) => [g, new Set(cells)])),
-    sources: s.sources.map((x) => ({ ...x })),
+    sources: s.sources.map((q) => ({ ...q })),
     gridDogs: new Set(s.gridDogs),
     walkers: s.walkers.map((w) => ({ ...w, path: [...w.path] })),
     reserved: new Set(s.reserved),
@@ -58,18 +58,26 @@ export function key(s: BoardState): string {
     .sort()
     .join('|');
   const bones = [...s.bones]
-    .map(([c, b]) => `${c}:${b.count}:${b.order}`)
+    .filter(([, b]) => b.count > 0)
+    .map(([c, b]) => `${c}:${b.count}/${b.order}`)
     .sort()
     .join(',');
   const dogs = s.sources
-    .map((x) => (x.kind === 'queue' ? `q${x.remaining}` : `d${x.cell}`))
+    .map((q) => (q.kind === 'queue' ? `q${q.cell}:${q.remaining}` : `g${q.cell}`))
     .sort()
-    .join('/');
+    .join(',');
   return `${groups}#${bones}#${dogs}`;
 }
 
-/** Every board a single drag-and-release could produce from here. */
-export function successors(s: BoardState): Array<{ move: Move; state: BoardState }> {
+/**
+ * Every board a single drag-and-release could produce from here.
+ *
+ * Straight drags are the bulk of it. `corners` additionally enumerates the
+ * L-shaped gestures `slideGroupBy` allows -- a drag that rounds a corner in one
+ * motion passes through a configuration *without* the dogs resolving, which is
+ * a state no pair of straight drags can reach.
+ */
+export function successors(s: BoardState, corners = false): Array<{ move: Move; state: BoardState }> {
   const out: Array<{ move: Move; state: BoardState }> = [];
   const reach = Math.max(s.cols, s.rows);
   for (const group of [...s.groups.keys()]) {
@@ -81,6 +89,17 @@ export function successors(s: BoardState): Array<{ move: Move; state: BoardState
         const state = cloneState(cur);
         playOut(state);
         out.push({ move: { group, dir, cells }, state });
+      }
+    }
+    if (!corners) continue;
+    for (let wc = -reach; wc <= reach; wc++) {
+      for (let wr = -reach; wr <= reach; wr++) {
+        if (wc === 0 || wr === 0) continue;   // straight drags already covered
+        const state = cloneState(s);
+        const moved = slideGroupBy(state, group, wc, wr);
+        if (moved.dc === 0 && moved.dr === 0) continue;
+        playOut(state);
+        out.push({ move: { group, dir: (moved.dc ? (moved.dc > 0 ? 'right' : 'left') : (moved.dr > 0 ? 'down' : 'up')), cells: Math.abs(moved.dc) + Math.abs(moved.dr) }, state });
       }
     }
   }
@@ -106,7 +125,7 @@ export interface Analysis {
   fatal: { path: Move[]; move: Move; before: BoardState; after: BoardState } | null;
 }
 
-export function analyze(level: LevelData, limit = 200_000): Analysis {
+export function analyze(level: LevelData, limit = 200_000, corners = false): Analysis {
   const { spec } = parseLevel(level);
   const start = createBoard(spec);
   playOut(start); // GameApp.load() sends dogs before the player touches anything
@@ -122,7 +141,7 @@ export function analyze(level: LevelData, limit = 200_000): Analysis {
     if (node.won) continue; // the level is over; nothing follows
     if (nodes.size > limit) throw new Error('state space too large');
 
-    for (const { move, state } of successors(node.state)) {
+    for (const { move, state } of successors(node.state, corners)) {
       const nk = key(state);
       let next = nodes.get(nk);
       if (!next) {
@@ -177,6 +196,8 @@ export function render(s: BoardState): string[] {
       const i = r * s.cols + c;
       const u = s.units.get(i);
       if (u) line += s.bones.has(i) ? u.group[0].toUpperCase() : u.group[0];
+      else if (s.bones.has(i)) line += '+';
+      else if (s.gridDogs.has(i)) line += '@';
       else if (s.dead.has(i)) line += 'X';
       else if (s.walls.has(i)) line += '#';
       else if (s.bees.has(i)) line += '*';
@@ -212,4 +233,22 @@ export function distToWin(a: Analysis): Map<string, number> {
     }
   }
   return dist;
+}
+
+/**
+ * Groups that cannot move in any direction right now -- undeclared walls.
+ *
+ * A frozen group is the ingredient behind the nastiest soft lock in the game:
+ * it partitions the board like a wall, but unlike a wall it can be *unfrozen*
+ * by a bite, because a group that loses a unit is smaller and may suddenly fit
+ * where it did not. That makes it a one-way door whose key is the bone on it --
+ * and spending the only dog that can turn that key leaves the door shut for good.
+ */
+export function frozenGroups(state: BoardState): string[] {
+  const out: string[] = [];
+  for (const group of state.groups.keys()) {
+    const canMove = DIRS.some((d) => canStepGroup(state, group, DIR_VEC[d].dc, DIR_VEC[d].dr));
+    if (!canMove) out.push(group);
+  }
+  return out;
 }

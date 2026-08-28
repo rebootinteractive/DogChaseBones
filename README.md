@@ -57,7 +57,7 @@ multi-queue system on the grid edges.
 | `src/levels/published/` | Level files written by the Repo tab, under version control. |
 | `plugins/repoLevels.ts` | Dev-only middleware that lets the editor read/write those files. |
 | `docs/level-data.md` | The level format, and the rules for sharing it with Unity. |
-| `docs/soft-locks.md` | Which levels can be made unwinnable, and why bees are the only cause. |
+| `docs/soft-locks.md` | How a level can be dragged into an unwinnable state, and what to check before publishing. |
 | `docs/supabase-schema.sql` | Run once in the shared studio project. |
 
 ## Tuning

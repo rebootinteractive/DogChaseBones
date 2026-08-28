@@ -1,17 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { FIXTURE_LEVELS } from './fixtures/levels';
-import { analyze, distToWin, key, playOut, render } from './softlock/analyze';
+import { analyze, distToWin, frozenGroups, key, playOut, render } from './softlock/analyze';
 import { parseLevel } from '../src/game/level';
-import { createBoard, queuesOf } from '../src/game/board';
+import { createBoard, queuesOf, takeBone, dogsRemaining } from '../src/game/board';
 import { resolveMoves } from '../src/game/resolve';
 import { validateLevel } from '../src/game/validate';
 import { slideGroupBy } from '../src/game/slide';
+import { isWon } from '../src/game/resolve';
 import { idx } from '../src/game/cells';
 import type { LevelData } from '../src/shared/types';
 import { levelFromAscii } from './helpers';
 import noBee from './softlock/levels/sl-no-bee.json';
 import oneBee from './softlock/levels/sl-one-bee.json';
 import twoBees from './softlock/levels/sl-two-bees.json';
+import designer from '../src/levels/published/softlock.json';
 
 /**
  * Soft locks: reachable board states from which the level can never be won,
@@ -21,6 +23,17 @@ import twoBees from './softlock/levels/sl-two-bees.json';
  *
  * `analyze` walks the entire reachable state graph and marks a state dead when
  * no sequence of drags from it reaches a win. See tests/softlock/analyze.ts.
+ *
+ * There are two ways to lose a level for good, and they have nothing in common
+ * except that both turn on a bite:
+ *
+ *   1. A bee whose plug carries a bone. Eating it destroys the block that was
+ *      sealing the flood, and the flood is permanent.  -- sl-one-bee
+ *   2. A frozen group. A block group boxed in on all four sides is a wall the
+ *      level never declared, and eating a bone off it makes it smaller and so
+ *      possibly mobile. It is a one-way door whose key is the bone behind it;
+ *      spend the only dog that can turn that key and the door never opens.
+ *      No bee involved.  -- SoftLock, below
  */
 
 describe('the shipped fixture levels', () => {
@@ -32,24 +45,25 @@ describe('the shipped fixture levels', () => {
 });
 
 /**
- * The only thing on this board that stops a dog but not a block is bee reach.
- * Every other obstacle -- wall, dead cell, unit, reservation -- blocks both
- * equally, and a drag with no bite is always undoable by dragging back. So in
- * a bee-free level the player can always restore any earlier arrangement, and
- * every dog sharing a region can reach every bone in it: no bite can strand a
- * later dog. This level is built to look like the classic trap -- the greedy
- * resolver spends a dog on a bone another queue was waiting for -- and it
- * still cannot be locked.
+ * A near-miss, kept as a control. The player does not choose which dog walks or
+ * which bone it takes -- `resolveMoves` sends every leader that has a route and
+ * `findRoute` hands it the nearest unclaimed bone -- so opening a corridor early
+ * lets one queue's dog eat the bone another was waiting for.
+ *
+ * In *this* level that is recoverable: nothing here is frozen, so any block can
+ * be dragged aside and the stranded dog walks the same corridor to the other
+ * bone. Compare `SoftLock`, where a frozen bar makes the same theft permanent.
  */
+
 describe('sl-no-bee', () => {
   const level = noBee as LevelData;
 
-  it('is winnable and has no reachable dead state', () => {
+  it('is winnable and, in this layout, has no reachable dead state', () => {
     const a = analyze(level);
     expect(a.winnable).toBe(true);
     expect(a.dead.size).toBe(0);
     expect(a.fatal).toBeNull();
-  });
+  }, 60_000);
 
   it('costs at most one extra drag however badly it is opened', () => {
     const a = analyze(level);
@@ -58,7 +72,7 @@ describe('sl-no-bee', () => {
     const worst = Math.max(...a.nodes.get(a.start)!.edges.map((e) => d.get(e.to)!));
     expect(best).toBe(4);
     expect(worst).toBeLessThanOrEqual(best + 1);
-  });
+  }, 60_000);
 });
 
 /**
@@ -185,4 +199,104 @@ describe('sl-tiers -- bone order on a bee-free board', () => {
     expect(a.winnable).toBe(true);
     expect(a.dead.size).toBe(0);
   });
+});
+
+/**
+ * The designer's level, and the case that disproved the "only a bee can lock a
+ * level" claim this file used to make.
+ *
+ * `g1` is a three-wide bar at (0,3)(1,3)(2,3), boxed in by walls above at (0,2)
+ * and (2,2), below at (0,4), right at (3,3), and the grid edge on the left. It
+ * cannot step in any direction: it is a wall the level never declared, and it
+ * is the only route between the top-left room and the bottom corridor.
+ *
+ * The top-left dog is sealed behind it. The bottom-right dog is the only one
+ * that can reach the bone the bar carries, from (2,4) -- and eating it shrinks
+ * the bar to two cells, which *can* move, which is what finally lets the
+ * top-left dog out. So that one bite is the key to the door.
+ *
+ * Spend the bottom-right dog on the other bone instead and the door stays shut
+ * for good. Which is what happens by default: `g3` sits on that dog's entry
+ * cell, and the moment it is dragged off, the dog takes the nearest bone -- the
+ * one on `g2`, two steps away, the wrong one.
+ */
+describe('SoftLock (published) -- a frozen group, and no bee', () => {
+  const level = designer as LevelData;
+  const cell = (c: number, r: number) => idx(7, c, r);
+  // one graph, shared: it is ~2600 states with corner drags and costs a few seconds
+  let cached: ReturnType<typeof analyze> | undefined;
+  const analysis = () => (cached ??= analyze(level, 200_000, true));
+
+  it('has no bees, and the editor reports nothing wrong with it', () => {
+    const { spec, issues } = parseLevel(level);
+    expect(issues).toEqual([]);
+    expect(validateLevel(spec)).toEqual([]);
+    expect(spec.bees.size).toBe(0);
+  });
+
+  it('g1 is frozen, and eating its bone is what unfreezes it', () => {
+    const { spec } = parseLevel(level);
+    const state = createBoard(spec);
+
+    expect(frozenGroups(state)).toEqual(['g1']);
+
+    takeBone(state, cell(2, 3));
+    expect(frozenGroups(state)).toEqual([]);   // two cells now, and it fits
+  });
+
+  it('is winnable, and can be soft-locked', () => {
+    const a = analysis();
+    expect(a.winnable).toBe(true);
+    expect(distToWin(a).get(a.start)).toBe(3);
+    expect(a.dead.size).toBe(14);
+  }, 60_000);
+
+  it('every dead state is the same one: the bar keeps its bone forever', () => {
+    const a = analysis();
+    for (const k of a.dead) {
+      const s = a.nodes.get(k)!.state;
+      expect([...s.bones.keys()]).toEqual([cell(2, 3)]);
+      expect(dogsRemaining(s)).toBe(1);
+    }
+  }, 60_000);
+
+  it('over half the opening drags lose the level outright', () => {
+    const a = analysis();
+    const start = a.nodes.get(a.start)!;
+    const fatal = start.edges.filter((e) => a.dead.has(e.to)).length;
+    expect(start.edges.length).toBe(306);
+    expect(fatal).toBe(156);
+  }, 60_000);
+
+  it('locks the moment the bottom-right dog is let out at the wrong bone', () => {
+    const { spec } = parseLevel(level);
+    const state = createBoard(spec);
+    playOut(state);
+    expect(dogsRemaining(state)).toBe(2);      // g3 covers the entry, nobody moves
+
+    slideGroupBy(state, 'g3', 0, -1);          // g3 off the entry cell
+    playOut(state);
+
+    // the nearest bone was g2's, two steps away. It is gone, and with it the level.
+    expect([...state.bones.keys()]).toEqual([cell(2, 3)]);
+    expect(analysis().dead.has(key(state))).toBe(true);
+  }, 60_000);
+
+  it('is won by putting the near bone out of reach before opening the entry', () => {
+    const { spec } = parseLevel(level);
+    const state = createBoard(spec);
+    playOut(state);
+
+    slideGroupBy(state, 'g2', 2, -3);          // the bone up to the top-right corner
+    slideGroupBy(state, 'g3', 0, -1);          // g3 up into the right column, walling it off
+    playOut(state);
+    // forced left along the bottom corridor, the dog takes the bar's bone
+    expect(state.bones.has(cell(2, 3))).toBe(false);
+
+    // The bar is two cells now and can move -- but it has to be parked out of the
+    // bottom corridor, not in it, or it simply becomes the next wall.
+    slideGroupBy(state, 'g1', 5, 1);
+    playOut(state);
+    expect(isWon(state)).toBe(true);
+  }, 60_000);
 });
