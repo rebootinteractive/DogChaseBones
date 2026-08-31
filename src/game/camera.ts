@@ -15,10 +15,16 @@ export interface Camera {
   originY: number;
 }
 
-export function computeCamera(cols: number, rows: number, s = SETTINGS): Camera {
+/**
+ * `stageH` is the stage height actually on screen (see `fitStage`): the design
+ * 852 on a phone-frame desktop, less on a browser viewport whose chrome has to
+ * be paid for out of the same screen. The board fits the height it really has,
+ * so the margins stay the same fraction of the screen on every device.
+ */
+export function computeCamera(cols: number, rows: number, s = SETTINGS, stageH = STAGE_H): Camera {
   const m = s.camera.margin;
   const fitW = Math.max(1, STAGE_W - m.left - m.right);
-  const fitH = Math.max(1, STAGE_H - m.top - m.bottom);
+  const fitH = Math.max(1, stageH - m.top - m.bottom);
   const raw = Math.min(fitW / cols, fitH / rows);
   const cell = Math.max(s.camera.minCellSize, Math.min(s.camera.maxCellSize, raw));
   return {

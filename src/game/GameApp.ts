@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js';
 import type { FederatedPointerEvent } from 'pixi.js';
 import type { LevelData } from '../shared/types';
-import { STAGE_H, STAGE_W } from '../shared/stage';
+import { fitStage, STAGE_H, STAGE_W } from '../shared/stage';
 import { SETTINGS } from './settings';
 import { parseLevel } from './level';
 import type { LevelSpec } from './level';
@@ -71,6 +71,8 @@ export class GameApp {
   private drag: Drag | null = null;
   private anims: WalkerAnim[] = [];
 
+  /** Stage height currently on screen -- see fitStage. The camera is laid out in it. */
+  private stageH = STAGE_H;
   private resizeObserver?: ResizeObserver;
   private backBtn?: HTMLButtonElement;
   private banner?: HTMLDivElement;
@@ -114,7 +116,7 @@ export class GameApp {
     if (issues.length) console.warn('[DogChaseBones] level issues:', issues);
     this.spec = spec;
     this.state = createBoard(spec);
-    this.cam = computeCamera(spec.cols, spec.rows);
+    this.cam = computeCamera(spec.cols, spec.rows, SETTINGS, this.stageH);
     this.timeLeft = spec.timeLimit;
     this.status = 'playing';
     this.drag = null;
@@ -491,12 +493,27 @@ export class GameApp {
   }
 
   private fit() {
-    // letterbox the fixed 393x852 stage into the parent
+    // The stage is 393pt wide everywhere and as tall as the parent allows, so a
+    // browser viewport shortened by its own chrome loses board height instead of
+    // shrinking the whole board and doubling the gap beside it.
     const { clientWidth: w, clientHeight: h } = this.parent;
-    const scale = Math.min(w / STAGE_W, h / STAGE_H);
-    this.app.stage.scale.set(scale);
-    this.app.stage.position.set((w - STAGE_W * scale) / 2, (h - STAGE_H * scale) / 2);
+    if (w <= 0 || h <= 0) return;  // laid out at zero size, e.g. mid-navigation
+    const f = fitStage(w, h);
+    this.app.stage.scale.set(f.scale);
+    this.app.stage.position.set(f.offsetX, f.offsetY);
     this.app.renderer.resize(w, h);
+    if (Math.abs(f.stageH - this.stageH) > 0.5) {
+      this.stageH = f.stageH;
+      this.app.stage.hitArea = new Rectangle(0, 0, STAGE_W, f.stageH);
+      if (this.spec) this.relayout();
+    }
+  }
+
+  /** Re-fit the board to a stage that changed height (rotation, chrome hiding). */
+  private relayout() {
+    this.cam = computeCamera(this.spec.cols, this.spec.rows, SETTINGS, this.stageH);
+    this.drawGrid();
+    this.redraw();
   }
 
   dispose() {

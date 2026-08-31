@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cellAt, cellCenter, computeCamera, computeEditorCamera, toCellDelta } from '../src/game/camera';
-import { STAGE_H, STAGE_W } from '../src/shared/stage';
+import { fitStage, STAGE_H, STAGE_MIN_H, STAGE_W } from '../src/shared/stage';
 
 const s = {
   camera: { margin: { top: 132, right: 56, bottom: 56, left: 56 }, maxCellSize: 64, minCellSize: 16 },
@@ -88,5 +88,47 @@ describe('computeEditorCamera', () => {
     const cam = computeEditorCamera(6, 10, { width: 0, height: 0 }, s);
     expect(Number.isFinite(cam.cell)).toBe(true);
     expect(cam.cell).toBe(10);
+  });
+});
+
+describe('fitStage', () => {
+  it('fills the width and takes its height from the view when the view is short', () => {
+    // A phone viewport minus browser chrome: shorter than the 852 design stage.
+    const f = fitStage(390, 693);
+    expect(f.scale).toBeCloseTo(390 / STAGE_W);
+    expect(f.stageH).toBeCloseTo(693 / (390 / STAGE_W));
+    expect(f.offsetX).toBeCloseTo(0);
+    expect(f.offsetY).toBeCloseTo(0);
+  });
+
+  it('gives the design stage back on a 393x852 frame', () => {
+    const f = fitStage(STAGE_W, STAGE_H);
+    expect(f.scale).toBeCloseTo(1);
+    expect(f.stageH).toBeCloseTo(STAGE_H);
+  });
+
+  it('leaves the same fraction of the view beside the grid on any portrait size', () => {
+    const gap = (vw: number, vh: number) => {
+      const f = fitStage(vw, vh);
+      const cam = computeCamera(8, 12, s, f.stageH);
+      return (f.offsetX + cam.originX * f.scale) / vw;
+    };
+    expect(gap(390, 693)).toBeCloseTo(gap(STAGE_W, STAGE_H), 2);
+  });
+
+  it('letterboxes rather than exploding when the view is very wide', () => {
+    const f = fitStage(844, 390);
+    expect(f.stageH).toBe(STAGE_MIN_H);
+    expect(f.scale).toBeCloseTo(390 / STAGE_MIN_H);
+    expect(f.offsetX).toBeGreaterThan(0);
+  });
+});
+
+describe('computeCamera on an elastic stage', () => {
+  it('fits the grid into the stage height it is given', () => {
+    const cam = computeCamera(6, 10, s, 693);
+    const fitH = 693 - 132 - 56;
+    expect(cam.cell).toBeCloseTo(Math.min((STAGE_W - 112) / 6, fitH / 10));
+    expect(cam.originY + 10 * cam.cell).toBeLessThanOrEqual(693 - 56 + 0.001);
   });
 });
