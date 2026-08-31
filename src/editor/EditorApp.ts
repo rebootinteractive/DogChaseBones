@@ -6,10 +6,11 @@ import type { SourceId } from '../levels/sources/types';
 import { blockElement, formatLevelJson } from '../levels/serialize';
 import { ServerSource } from '../levels/sources/server';
 import { SETTINGS } from '../game/settings';
-import { DIRS, DIR_VEC, colOf, connectedComponents, idx, rowOf } from '../game/cells';
+import { DIRS, DIR_VEC, colOf, rowOf } from '../game/cells';
 import { detachCell, dropShape, indexShapes, paintCell } from './shapes';
 import type { Grid, Shape, ShapeList } from './shapes';
-import type { Dir } from '../game/cells';
+import { EDGES, cloneContent, edgeResize, resizeContent, sameContent } from './grid';
+import type { Edge, EditorQueue, GridContent } from './grid';
 import { MAX_BONE_ORDER, MAX_DIM, MIN_DIM, SCHEMA_VERSION, parseLevel } from '../game/level';
 import type { BoneStack } from '../game/level';
 import { boundaryDirs } from '../game/board';
@@ -38,7 +39,15 @@ export interface EditorOptions {
 
 type Tool = 'block' | 'move' | 'bone' | 'wall' | 'bee' | 'dead' | 'queue' | 'dog' | 'erase';
 
-interface EditorQueue { cell: number; dir: Dir; count: number }
+/** The board as one undo step remembers it. */
+interface EditorState {
+  cols: number;
+  rows: number;
+  content: GridContent;
+  /** The shape the Block tool was painting into, by place in the list. */
+  activeIndex: number;
+  selectedQueue: number;
+}
 
 /** A block group picked up with the Move tool and not yet dropped. */
 interface MoveDrag {
@@ -68,6 +77,9 @@ const MIN_QUEUE_DOGS = 1;
 /** A new queue starts at one dog -- tap it again to add more. */
 const NEW_QUEUE_DOGS = 1;
 const MAX_QUEUE_DOGS = 20;
+
+/** Edits Ctrl+Z can walk back through. Deep enough for a sitting's authoring. */
+const HISTORY_LIMIT = 100;
 
 const TOOLS: Array<{ id: Tool; label: string; hint: string }> = [
   { id: 'block', label: 'Block', hint: 'Tap cells to grow the selected shape. A shape must stay one connected piece; breaking it splits it in two.' },
@@ -124,6 +136,8 @@ export class EditorApp {
   private lastPainted: number | null = null;
   private moveDrag: MoveDrag | null = null;
   private selectedQueue = -1;
+  /** The board before each edit, oldest first. Ctrl+Z walks back through it. */
+  private history: EditorState[] = [];
 
   private host?: HTMLDivElement;
   private sceneEl?: HTMLDivElement;
@@ -230,6 +244,8 @@ export class EditorApp {
     const cell = this.cellUnder(e);
     if (cell === null) return;
     if (this.tool === 'move') { this.beginMove(cell, e); return; }
+    // One stroke is one undo step, however many cells the drag paints.
+    this.beginEdit();
     this.painting = true;
     this.lastPainted = null;
     this.apply(cell, e.shiftKey);
@@ -247,21 +263,31 @@ export class EditorApp {
 
   private onUp = () => {
     if (this.moveDrag) { this.endMove(); return; }
+    if (!this.painting) return;
     this.painting = false;
     this.lastPainted = null;
+    this.endEdit();
   };
 
   /**
-   * Desktop authoring: 1-8 pick a tool, Shift+1-9 pick a paint colour while the
-   * Block tool is up. `code` rather than `key`, because Shift+1 reports "!" on
-   * most layouts but always reports Digit1.
+   * Desktop authoring: Ctrl+Z undoes, 1-9 pick a tool, Shift+1-9 pick a paint
+   * colour while the Block tool is up. `code` rather than `key`, because
+   * Shift+1 reports "!" on most layouts but always reports Digit1.
    */
   private onKeyDown = (e: KeyboardEvent) => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     if (this.modal) return;
 
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+    // Undo sits ahead of the modifier guard below, and lets key repeat through:
+    // holding Ctrl+Z walks back through the history, the way it does anywhere.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.code === 'KeyZ') {
+      e.preventDefault();
+      this.undo();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
 
     const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
     if (!digit) return;
@@ -316,6 +342,7 @@ export class EditorApp {
     const shape = this.owner.get(cell);
     if (!shape) { this.flash('Nothing to move here — grab a block.'); return; }
 
+    this.beginEdit();
     const p = this.app.stage.toLocal(e.global);
     // The shape under the finger, whole. No hunting for a connected run: the
     // shape already knows which cells are its own.
@@ -363,6 +390,7 @@ export class EditorApp {
       this.flash('That does not fit — the group went back.');
     }
 
+    this.endEdit();
     this.redraw();
     this.refreshChrome();
   }
@@ -716,43 +744,109 @@ export class EditorApp {
     return [...issues, ...validateLevel(spec)];
   }
 
-  private resize(dCols: number, dRows: number) {
-    const cols = clamp(this.cols + dCols, MIN_DIM, MAX_DIM);
-    const rows = clamp(this.rows + dRows, MIN_DIM, MAX_DIM);
-    if (cols === this.cols && rows === this.rows) return;
+  /** The live board, by reference -- to clone it, compare it or replace it. */
+  private content(): GridContent {
+    return {
+      dead: this.dead, walls: this.walls, bees: this.bees, dogs: this.dogs,
+      bones: this.bones, queues: this.queues, shapes: this.shapes,
+    };
+  }
 
-    // Re-key everything by (col,row) so content keeps its position when the grid grows.
-    const remap = <T,>(src: Iterable<[number, T]>): Array<[number, T]> =>
-      [...src]
-        .map(([cell, v]) => [colOf(this.cols, cell), rowOf(this.cols, cell), v] as const)
-        .filter(([c, r]) => c < cols && r < rows)
-        .map(([c, r, v]) => [idx(cols, c, r), v] as [number, T]);
+  /** Take a board wholesale. Takes ownership: nothing here is copied again. */
+  private installContent(content: GridContent, activeIndex: number) {
+    this.dead = content.dead;
+    this.walls = content.walls;
+    this.bees = content.bees;
+    this.dogs = content.dogs;
+    this.bones = content.bones;
+    this.queues = content.queues;
+    this.setShapes(content.shapes);
+    this.active = content.shapes[activeIndex] ?? content.shapes[0] ?? null;
+  }
 
-    const keys = (src: Set<number>) => new Set(remap([...src].map((c) => [c, true] as [number, boolean])).map(([c]) => c));
+  // ------------------------------------------------------------------ grid ---
 
-    const nextBones = new Map(remap(this.bones));
-    // A shape can lose cells to a shrinking grid, and what is left may be in
-    // pieces -- the same split the Block tool does, applied to every shape.
-    const nextShapes: Shape[] = [];
-    for (const shape of this.shapes) {
-      const kept = new Set(remap([...shape.cells].map((c) => [c, true] as [number, boolean])).map(([c]) => c));
-      if (!kept.size) continue;
-      for (const part of connectedComponents(cols, rows, kept)) nextShapes.push({ cells: part });
+  /**
+   * Grow or shrink the board at one edge.
+   *
+   * Four edges rather than a width and a height, because a level is drawn
+   * somewhere in particular: wanting another row above what you drew should not
+   * mean drawing it again one row down. Adding at the top or the left carries
+   * the whole level with it; adding at the right or the bottom leaves every
+   * coordinate where it was. Taking an edge away drops whatever stood on it.
+   */
+  private resizeEdge(edge: Edge, delta: number) {
+    const to = edgeResize(this.grid(), edge, delta);
+    if (!to) return;   // at MIN_DIM or MAX_DIM already -- the pad's button is off
+    this.edit(() => {
+      const activeIndex = this.active ? this.indexOf(this.active) : -1;
+      this.installContent(resizeContent(this.grid(), to, this.content()), activeIndex);
+      this.cols = to.cols;
+      this.rows = to.rows;
+      this.selectedQueue = -1;
+      this.fit();
+      this.refreshChrome();
+    });
+  }
+
+  // --------------------------------------------------------------- history ---
+
+  /**
+   * Undo remembers whole boards rather than what each tool did.
+   *
+   * A board is a few hundred cells, every tool already leaves one behind, and
+   * remembering it means a tool written tomorrow is undoable without anyone
+   * having to say how to reverse it. What it deliberately leaves out is the
+   * name and the time limit: those are text fields with an undo of their own,
+   * and Ctrl+Z inside one should stay inside it.
+   */
+  private beginEdit() {
+    this.history.push({
+      cols: this.cols,
+      rows: this.rows,
+      content: cloneContent(this.content()),
+      activeIndex: this.active ? this.indexOf(this.active) : -1,
+      selectedQueue: this.selectedQueue,
+    });
+    if (this.history.length > HISTORY_LIMIT) this.history.shift();
+  }
+
+  /**
+   * Close the edit begun above, dropping the step when the board came out
+   * exactly as it went in -- a paint the Block tool refused, a tap that only
+   * picked a queue. Ctrl+Z should always visibly do something.
+   */
+  private endEdit() {
+    const step = this.history[this.history.length - 1];
+    if (!step) return;
+    if (step.cols === this.cols && step.rows === this.rows && sameContent(step.content, this.content())) {
+      this.history.pop();
     }
-    this.walls = keys(this.walls);
-    this.bees = keys(this.bees);
-    this.dead = keys(this.dead);
-    this.dogs = keys(this.dogs);
-    this.queues = this.queues
-      .filter((q) => colOf(this.cols, q.cell) < cols && rowOf(this.cols, q.cell) < rows)
-      .map((q) => ({ ...q, cell: idx(cols, colOf(this.cols, q.cell), rowOf(this.cols, q.cell)) }));
-    this.bones = nextBones;
+  }
 
-    this.cols = cols;
-    this.rows = rows;
-    this.setShapes(nextShapes);
-    this.selectedQueue = -1;
-    this.fit();
+  /** One edit, as one undo step. */
+  private edit(fn: () => void) {
+    this.beginEdit();
+    fn();
+    this.endEdit();
+  }
+
+  private undo() {
+    // A gesture still in flight has a step open. A stroke has already painted
+    // its cells, so that step is exactly the board to go back to; a drag has
+    // not been committed, so going back to it just calls the drag off.
+    this.moveDrag = null;
+    this.painting = false;
+    this.lastPainted = null;
+
+    const step = this.history.pop();
+    if (!step) { this.flash('Nothing left to undo.'); return; }
+
+    this.cols = step.cols;
+    this.rows = step.rows;
+    this.installContent(step.content, step.activeIndex);
+    this.selectedQueue = step.selectedQueue < step.content.queues.length ? step.selectedQueue : -1;
+    this.fit();   // the camera follows the grid, and fit() redraws
     this.refreshChrome();
   }
 
@@ -766,16 +860,27 @@ export class EditorApp {
       <div class="chrome-body">
         <div class="tool-row"></div>
         <p class="tool-hint"></p>
-        <p class="key-hint">1\u20139 pick a tool \u00b7 \u21e7 1\u20139 pick a shape or bone tier</p>
+        <p class="key-hint">1\u20139 pick a tool \u00b7 \u21e7 1\u20139 pick a shape or bone tier \u00b7 Ctrl+Z undo</p>
         <div class="group-row"></div>
         <div class="tier-row group-row"></div>
         <div class="settings-row">
           <label>Name <input class="editor-name" /></label>
-          <label>Grid
-            <span class="stepper"><button data-act="col-">−</button><b class="dim-cols">6</b><button data-act="col+">+</button></span>
-            <span class="stepper"><button data-act="row-">−</button><b class="dim-rows">10</b><button data-act="row+">+</button></span>
-          </label>
           <label>Time <input class="editor-time" type="number" min="5" step="5" /> s</label>
+        </div>
+        <div class="grid-pad">
+          <span class="stepper pad-top">
+            <button data-act="top-" title="Take the top row off">−</button><b>Top</b><button data-act="top+" title="Add a row above">+</button>
+          </span>
+          <span class="stepper pad-left">
+            <button data-act="left-" title="Take the left column off">−</button><b>Left</b><button data-act="left+" title="Add a column on the left">+</button>
+          </span>
+          <span class="pad-size">Grid <b class="dim-size">6 × 10</b></span>
+          <span class="stepper pad-right">
+            <button data-act="right-" title="Take the right column off">−</button><b>Right</b><button data-act="right+" title="Add a column on the right">+</button>
+          </span>
+          <span class="stepper pad-bottom">
+            <button data-act="bottom-" title="Take the bottom row off">−</button><b>Bottom</b><button data-act="bottom+" title="Add a row below">+</button>
+          </span>
         </div>
         <div class="queue-panel">
           <span class="queue-where"></span>
@@ -824,15 +929,15 @@ export class EditorApp {
 
     const on = (sel: string, fn: () => void) => bar.querySelector(`[data-act="${sel}"]`)!.addEventListener('click', fn);
     on('collapse', () => { bar.classList.toggle('collapsed'); });
-    on('col-', () => this.resize(-1, 0));
-    on('col+', () => this.resize(1, 0));
-    on('row-', () => this.resize(0, -1));
-    on('row+', () => this.resize(0, 1));
-    on('dog-', () => this.bumpQueue(-1));
-    on('dog+', () => this.bumpQueue(1));
-    on('queue-turn', () => this.turnSelectedQueue());
-    on('queue-del', () => this.removeSelectedQueue());
-    on('clear', () => this.clearAll());
+    for (const edge of EDGES) {
+      on(edgeAct(edge, -1), () => this.resizeEdge(edge, -1));
+      on(edgeAct(edge, 1), () => this.resizeEdge(edge, 1));
+    }
+    on('dog-', () => this.edit(() => this.bumpQueue(-1)));
+    on('dog+', () => this.edit(() => this.bumpQueue(1)));
+    on('queue-turn', () => this.edit(() => this.turnSelectedQueue()));
+    on('queue-del', () => this.edit(() => this.removeSelectedQueue()));
+    on('clear', () => { if (this.confirmClear()) this.edit(() => this.clearAll()); });
     on('test', () => this.opts.onTest(this.snapshot()));
     on('exit', () => this.opts.onExit());
     on('publish', () => this.showPublish());
@@ -867,6 +972,29 @@ export class EditorApp {
     this.selectedQueue = -1;
     this.redraw();
     this.refreshChrome();
+  }
+
+  /**
+   * Clear is the one button that can undo a whole session's work in a tap.
+   * Undo does bring it back, so this is a speed bump rather than a wall -- but
+   * it counts what is on the board first, the way the menu counts what a push
+   * would overwrite. An empty board is nothing to warn about.
+   */
+  private confirmClear(): boolean {
+    const parts: string[] = [];
+    const add = (n: number, one: string, many = one + 's') => {
+      if (n) parts.push(`${n} ${n === 1 ? one : many}`);
+    };
+    add(this.shapes.filter((s) => s.cells.size).length, 'block group');
+    add([...this.bones.values()].reduce((n, stack) => n + stack.count, 0), 'bone');
+    add(this.walls.size, 'wall');
+    add(this.bees.size, 'bee');
+    add(this.dogs.size, 'dog');
+    add(this.queues.length, 'queue');
+    add(this.dead.size, 'cell switched off', 'cells switched off');
+
+    if (!parts.length) return true;
+    return confirm(`Clear the board?\n\nEverything on it goes: ${list(parts)}.\n\nCtrl+Z brings it back.`);
   }
 
   private clearAll() {
@@ -921,7 +1049,7 @@ export class EditorApp {
       del.title = 'Delete this shape';
       del.onclick = (ev) => {
         ev.stopPropagation();
-        this.removeShape(shape);
+        this.edit(() => this.removeShape(shape));
         this.redraw();
         this.refreshChrome();
       };
@@ -933,7 +1061,7 @@ export class EditorApp {
     const add = document.createElement('button');
     add.className = 'group-chip new';
     add.textContent = '+ shape';
-    add.onclick = () => { this.addShape(); this.redraw(); this.refreshChrome(); };
+    add.onclick = () => { this.edit(() => this.addShape()); this.redraw(); this.refreshChrome(); };
     shapeRow.appendChild(add);
 
     // Tier chips mirror the colour chips: same class, same Shift+N gesture.
@@ -953,8 +1081,14 @@ export class EditorApp {
       tierRow.appendChild(b);
     }
 
-    bar.querySelector('.dim-cols')!.textContent = String(this.cols);
-    bar.querySelector('.dim-rows')!.textContent = String(this.rows);
+    bar.querySelector('.dim-size')!.textContent = this.cols + ' \u00d7 ' + this.rows;
+    // An edge already at a limit says so, rather than swallowing the press.
+    for (const edge of EDGES) {
+      for (const delta of [-1, 1]) {
+        const b = bar.querySelector<HTMLButtonElement>('[data-act="' + edgeAct(edge, delta) + '"]');
+        if (b) b.disabled = edgeResize(this.grid(), edge, delta) === null;
+      }
+    }
 
     const qc = bar.querySelector<HTMLElement>('.queue-panel')!;
     const q = this.queues[this.selectedQueue];
@@ -1080,12 +1214,24 @@ export class EditorApp {
     if (this.saveResetTimer) clearTimeout(this.saveResetTimer);
     this.list = indexShapes([]);
     this.queues = [];
+    this.history = [];
     this.boneLabels.destroy();
     this.tierLabels.destroy();
     this.queueLabels.destroy();
     // destroys renderer, view canvas, and all stage children/graphics
     this.app.destroy({ removeView: true }, { children: true, texture: true });
   }
+}
+
+/** The data-act one grid-pad button carries, e.g. left- and left+. */
+function edgeAct(edge: Edge, delta: number): string {
+  return edge + (delta < 0 ? '-' : '+');
+}
+
+/** "a", "a and b", "a, b and c" -- for counts read back to the designer. */
+function list(parts: string[]): string {
+  if (parts.length < 2) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
 function clamp(v: number, lo: number, hi: number): number {

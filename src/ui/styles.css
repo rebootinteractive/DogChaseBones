@@ -206,6 +206,27 @@ body.editor-mode #phone {
   border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #c9cfe0;
 }
 .stepper b { min-width: 20px; text-align: center; color: #e8eaf0; font-size: 12px; }
+.stepper button:disabled { opacity: .3; cursor: default; }
+
+/* The grid pad. Each edge grows and shrinks on its own, and each control sits
+   where its edge sits on the board -- so "+" beside Top plainly means another
+   row along the top rather than one more row somewhere. */
+.grid-pad {
+  display: grid; gap: 4px 10px; justify-content: center; align-items: center;
+  grid-template-areas:
+    ".    top    ."
+    "left size   right"
+    ".    bottom .";
+}
+.pad-top { grid-area: top; }
+.pad-left { grid-area: left; }
+.pad-right { grid-area: right; }
+.pad-bottom { grid-area: bottom; }
+.pad-size { grid-area: size; font-size: 11.5px; color: #8891a8; white-space: nowrap; }
+.pad-size b { color: #e8eaf0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.grid-pad .stepper b {
+  min-width: 36px; font-size: 10.5px; color: #8891a8; letter-spacing: .02em;
+}
 
 .warn-list { margin: 0; padding: 0 0 0 16px; list-style: '\26a0  '; }
 .warn-list li { font-size: 11.5px; color: #ffd07a; line-height: 1.5; }
