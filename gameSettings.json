@@ -3,7 +3,7 @@
 
   "camera": {
     "$comment": "Margins from the 393x852 stage edge to the camera fit rect. The grid is scaled to fill what is left, with square cells. Dog queues render inside these margins and may run off-screen.",
-    "margin": { "top": 132, "right": 56, "bottom": 56, "left": 56 },
+    "margin": { "top": 140, "right": 30, "bottom": 56, "left": 30 },
     "maxCellSize": 64,
     "minCellSize": 16
   },
